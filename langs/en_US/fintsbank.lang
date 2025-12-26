@@ -1,0 +1,71 @@
+# Module
+Module500210Name=FinTS Bank
+Module500210Desc=Bank account synchronization via FinTS/HBCI
+
+# Menu
+FintsBankSync=Bank Sync
+BankConnections=Bank Connections
+Transactions=Transactions
+
+# Setup
+FintsBankSetup=FinTS Bank Configuration
+AddBankConnection=Add Bank Connection
+EditBankConnection=Edit Bank Connection
+BankCode=Bank Code (BLZ)
+FintsUrl=FinTS Server URL
+Username=Username
+CustomerId=Customer ID
+AccountNumber=Account Number
+SyncFromDate=Sync from date
+LastSync=Last synchronization
+ConnectionActive=Connection active
+
+# Sync
+SyncNow=Sync now
+EnterTAN=Enter TAN
+TANRequired=TAN required
+TANMethod=TAN method
+PhotoTAN=photoTAN
+PushTAN=pushTAN
+WaitingForTAN=Waiting for TAN input...
+ScanPhotoTAN=Please scan the code with your photoTAN app
+EnterTANFromApp=Enter the TAN from your app
+SyncSuccessful=Synchronization successful
+TransactionsImported=%s transactions imported
+NoNewTransactions=No new transactions
+
+# Transactions
+Transaction=Transaction
+BookingDate=Booking date
+ValueDate=Value date
+Amount=Amount
+Description=Description
+BookingText=Booking text
+CounterParty=Counter party
+EndToEndId=End-to-End ID
+Status=Status
+StatusNew=New
+StatusMatched=Matched
+StatusImported=Imported
+StatusIgnored=Ignored
+
+# Matching
+MatchTransaction=Match transaction
+MatchWithInvoice=Link with invoice
+MatchWithThirdParty=Assign customer/supplier
+AutoMatch=Auto match
+ImportToBank=Import to bank account
+IgnoreTransaction=Ignore transaction
+
+# Errors
+ErrorBankConnection=Bank connection error
+ErrorInvalidTAN=Invalid TAN
+ErrorTANTimeout=TAN input timeout
+ErrorSyncFailed=Synchronization failed
+ErrorNoAccountSelected=No bank account selected
+
+# Info
+FintsBankDescription=Retrieve your bank statements automatically via FinTS
+SupportedBanks=Supported banks: Commerzbank, Sparkasse, Volksbank and more
+SecurityNote=Your credentials are stored encrypted
+PhotoTANInfo=Scan the displayed code with your photoTAN app and enter the generated TAN

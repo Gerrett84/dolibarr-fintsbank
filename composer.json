@@ -1,0 +1,15 @@
+{
+    "name": "gerrett84/dolibarr-fintsbank",
+    "description": "FinTS/HBCI Bank Sync for Dolibarr",
+    "type": "dolibarr-module",
+    "license": "GPL-3.0-or-later",
+    "require": {
+        "php": ">=7.4",
+        "nemiah/php-fints": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "FintsBank\\": "class/"
+        }
+    }
+}

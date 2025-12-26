@@ -1,0 +1,71 @@
+# Module
+Module500210Name=FinTS Bank
+Module500210Desc=Bankkonten per FinTS/HBCI synchronisieren
+
+# Menu
+FintsBankSync=Kontoabruf
+BankConnections=Bankverbindungen
+Transactions=Transaktionen
+
+# Setup
+FintsBankSetup=FinTS Bank Konfiguration
+AddBankConnection=Bankverbindung hinzufuegen
+EditBankConnection=Bankverbindung bearbeiten
+BankCode=Bankleitzahl (BLZ)
+FintsUrl=FinTS Server URL
+Username=Benutzername
+CustomerId=Kunden-ID
+AccountNumber=Kontonummer
+SyncFromDate=Synchronisieren ab
+LastSync=Letzte Synchronisation
+ConnectionActive=Verbindung aktiv
+
+# Sync
+SyncNow=Jetzt synchronisieren
+EnterTAN=TAN eingeben
+TANRequired=TAN erforderlich
+TANMethod=TAN-Verfahren
+PhotoTAN=photoTAN
+PushTAN=pushTAN
+WaitingForTAN=Warte auf TAN-Eingabe...
+ScanPhotoTAN=Bitte scannen Sie den Code mit Ihrer photoTAN-App
+EnterTANFromApp=Geben Sie die TAN aus Ihrer App ein
+SyncSuccessful=Synchronisation erfolgreich
+TransactionsImported=%s Transaktionen importiert
+NoNewTransactions=Keine neuen Transaktionen
+
+# Transactions
+Transaction=Transaktion
+BookingDate=Buchungsdatum
+ValueDate=Valutadatum
+Amount=Betrag
+Description=Verwendungszweck
+BookingText=Buchungstext
+CounterParty=Auftraggeber/Empfaenger
+EndToEndId=End-to-End-ID
+Status=Status
+StatusNew=Neu
+StatusMatched=Zugeordnet
+StatusImported=Importiert
+StatusIgnored=Ignoriert
+
+# Matching
+MatchTransaction=Transaktion zuordnen
+MatchWithInvoice=Mit Rechnung verknuepfen
+MatchWithThirdParty=Kunde/Lieferant zuordnen
+AutoMatch=Automatisch zuordnen
+ImportToBank=In Bankkonto importieren
+IgnoreTransaction=Transaktion ignorieren
+
+# Errors
+ErrorBankConnection=Fehler bei der Bankverbindung
+ErrorInvalidTAN=Ungueltige TAN
+ErrorTANTimeout=TAN-Eingabe abgelaufen
+ErrorSyncFailed=Synchronisation fehlgeschlagen
+ErrorNoAccountSelected=Kein Bankkonto ausgewaehlt
+
+# Info
+FintsBankDescription=Rufen Sie Ihre Kontoauszuege automatisch per FinTS ab
+SupportedBanks=Unterstuetzte Banken: Commerzbank, Sparkasse, Volksbank und weitere
+SecurityNote=Ihre Zugangsdaten werden verschluesselt gespeichert
+PhotoTANInfo=Scannen Sie den angezeigten Code mit Ihrer photoTAN-App und geben Sie die generierte TAN ein
