@@ -69,3 +69,13 @@ FintsBankDescription=Rufen Sie Ihre Kontoauszuege automatisch per FinTS ab
 SupportedBanks=Unterstuetzte Banken: Commerzbank, Sparkasse, Volksbank und weitere
 SecurityNote=Ihre Zugangsdaten werden verschluesselt gespeichert
 PhotoTANInfo=Scannen Sie den angezeigten Code mit Ihrer photoTAN-App und geben Sie die generierte TAN ein
+
+# Sync dialog
+EnterPIN=PIN eingeben
+EnterYourBankingPIN=Geben Sie Ihre Banking-PIN ein
+Connecting=Verbinde...
+Processing=Verarbeite...
+ViewTransactions=Transaktionen anzeigen
+Retry=Erneut versuchen
+Confirm=Bestaetigen
+All=Alle

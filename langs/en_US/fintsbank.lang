@@ -69,3 +69,13 @@ FintsBankDescription=Retrieve your bank statements automatically via FinTS
 SupportedBanks=Supported banks: Commerzbank, Sparkasse, Volksbank and more
 SecurityNote=Your credentials are stored encrypted
 PhotoTANInfo=Scan the displayed code with your photoTAN app and enter the generated TAN
+
+# Sync dialog
+EnterPIN=Enter PIN
+EnterYourBankingPIN=Enter your banking PIN
+Connecting=Connecting...
+Processing=Processing...
+ViewTransactions=View transactions
+Retry=Retry
+Confirm=Confirm
+All=All
