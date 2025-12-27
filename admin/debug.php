@@ -218,7 +218,13 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
             }
 
             // Check for HHD/UC challenge (photoTAN image)
-            $challengeHhdUc = $tanRequest->getChallengeHhdUc();
+            $challengeHhdUcRaw = $tanRequest->getChallengeHhdUc();
+            // Convert Bin object to string if needed
+            if ($challengeHhdUcRaw instanceof \Fhp\Syntax\Bin) {
+                $challengeHhdUc = $challengeHhdUcRaw->getData();
+            } else {
+                $challengeHhdUc = $challengeHhdUcRaw;
+            }
             echo "  Has HHD/UC Challenge: " . ($challengeHhdUc ? 'YES (' . strlen($challengeHhdUc) . ' bytes)' : 'NO') . "\n";
 
             // Check for flicker code
