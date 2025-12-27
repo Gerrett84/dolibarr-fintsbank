@@ -206,15 +206,37 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
         if ($login->needsTan()) {
             echo "⚠ TAN required for login!\n";
             $tanRequest = $login->getTanRequest();
-            echo "  Challenge: " . $tanRequest->getChallenge() . "\n";
 
+            // Debug: Show all TAN request info
+            echo "\n  === TAN REQUEST DETAILS ===\n";
+            echo "  Challenge Text: " . $tanRequest->getChallenge() . "\n";
+            echo "  TAN Medium Name: " . ($tanRequest->getTanMediumName() ?: '(none)') . "\n";
+
+            // Check for decoupled mode
+            if (method_exists($tanRequest, 'isDecoupled')) {
+                echo "  Is Decoupled (Push): " . ($tanRequest->isDecoupled() ? 'YES' : 'NO') . "\n";
+            }
+
+            // Check for HHD/UC challenge (photoTAN image)
             $challengeHhdUc = $tanRequest->getChallengeHhdUc();
-            if ($challengeHhdUc) {
+            echo "  Has HHD/UC Challenge: " . ($challengeHhdUc ? 'YES (' . strlen($challengeHhdUc) . ' bytes)' : 'NO') . "\n";
+
+            // Check for flicker code
+            if (method_exists($tanRequest, 'getChallengeFlicker')) {
+                $flicker = $tanRequest->getChallengeFlicker();
+                echo "  Has Flicker Code: " . ($flicker ? 'YES' : 'NO') . "\n";
+            }
+
+            echo "  ============================\n\n";
+
+            if ($challengeHhdUc && strlen($challengeHhdUc) > 100) {
                 echo "  PhotoTAN Image available\n";
                 // Output image for display
                 echo "\n  === PHOTOTAN IMAGE (PNG) ===\n";
-                echo '  <img src="data:image/png;base64,' . base64_encode($challengeHhdUc) . '" alt="PhotoTAN" />' . "\n";
+                echo '  <img src="data:image/png;base64,' . base64_encode($challengeHhdUc) . '" alt="PhotoTAN" style="max-width:300px;" />' . "\n";
                 echo "  ============================\n\n";
+            } elseif ($challengeHhdUc) {
+                echo "  HHD/UC data (raw hex): " . bin2hex($challengeHhdUc) . "\n\n";
             }
 
             // Check if this is a decoupled (push) TAN
