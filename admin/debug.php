@@ -24,7 +24,24 @@ if (!$user->admin) {
 
 dol_include_once('/fintsbank/class/fintsaccount.class.php');
 
+// Option to clear session data
+if (isset($_GET['clear'])) {
+    unset($_SESSION['fints_debug_state']);
+    unset($_SESSION['fints_debug_login']);
+    unset($_SESSION['fints_debug_pin']);
+    echo "<p style='color:green;'>✓ Session-Daten gelöscht!</p>";
+    echo "<p><a href='?'>Weiter ohne Parameter</a></p>";
+}
+
+// Show if session has stored data
+$hasSessionData = isset($_SESSION['fints_debug_state']) || isset($_SESSION['fints_debug_login']);
+
 echo "<h1>FinTS Bank Debug</h1>";
+
+if ($hasSessionData) {
+    echo "<p style='color:orange;'>⚠ Es sind noch Session-Daten gespeichert. <a href='?clear=1'>Session löschen</a></p>";
+}
+
 echo "<pre>";
 
 // Check 1: php-fints library
@@ -268,6 +285,9 @@ if (isset($_GET['tan']) && !empty($_GET['tan']) && isset($_SESSION['fints_debug_
         if (isset($_GET['mode']) && $_GET['mode'] == '999' && $mode999) {
             $selectedMode = $mode999;
             echo "\n⚡ Using mode 999 (Einschritt) as requested\n";
+        } elseif (isset($_GET['mode']) && $_GET['mode'] == 'skip') {
+            $selectedMode = null;
+            echo "\n⚡ Skipping TAN mode selection as requested\n";
         } elseif ($modePhoto) {
             $selectedMode = $modePhoto;
         }
@@ -294,6 +314,8 @@ if (isset($_GET['tan']) && !empty($_GET['tan']) && isset($_SESSION['fints_debug_
                 $fints->selectTanMode($selectedMode);
             }
             echo "✓ TAN mode selected\n";
+        } else {
+            echo "\n⚠ No TAN mode selected - will use bank default\n";
         }
 
         // Step 2: Login
