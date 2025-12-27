@@ -159,12 +159,57 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
         );
         echo "✓ FinTs object created\n";
 
+        // Step 1: Login first (required in php-fints 2.1)
+        echo "Attempting login...\n";
+        flush();
+
+        // TAN callback for photoTAN
+        $tanCallback = function(\Fhp\Response\GetTANRequest $tanRequest) {
+            echo "\n⚠ TAN REQUIRED!\n";
+            echo "  Challenge: " . $tanRequest->getTanChallenge() . "\n";
+            $challengeHHD = $tanRequest->getTanChallengeHHD();
+            if ($challengeHHD) {
+                echo "  PhotoTAN Image (base64): " . base64_encode($challengeHHD) . "\n";
+            }
+            echo "  Add &tan=YOUR_TAN to the URL to continue\n";
+            // Return empty to abort - in real code we'd wait for user input
+            return isset($_GET['tan']) ? $_GET['tan'] : '';
+        };
+
+        try {
+            $fints->login(null, null, $tanCallback);
+            echo "✓ Login successful\n";
+        } catch (\Exception $e) {
+            if (strpos($e->getMessage(), 'Sicherheitsfunktionen') !== false) {
+                echo "  Available TAN mechanisms: " . $e->getMessage() . "\n";
+                echo "  Using first available mechanism...\n";
+                // Try with mechanism 900 (common for photoTAN)
+                $fints->login(900, null, $tanCallback);
+                echo "✓ Login successful with mechanism 900\n";
+            } else {
+                throw $e;
+            }
+        }
+
         echo "Attempting to get SEPA accounts...\n";
         flush();
-        $sepaAccounts = $fints->getSEPAAccounts();
+        $sepaAccounts = $fints->getSEPAAccounts($tanCallback);
         echo "✓ Got " . count($sepaAccounts) . " SEPA account(s):\n";
         foreach ($sepaAccounts as $sepa) {
             echo "  - IBAN: " . $sepa->getIban() . "\n";
+        }
+
+        // End session
+        $fints->end();
+        echo "✓ Session ended\n";
+
+    } catch (\Fhp\Dialog\Exception\TANRequiredException $e) {
+        echo "\n⚠ TAN REQUIRED!\n";
+        echo "  Challenge: " . $e->getResponse()->getTanChallenge() . "\n";
+        echo "  TAN Token: " . $e->getTANToken() . "\n";
+        $challengeHHD = $e->getResponse()->getTanChallengeHHD();
+        if ($challengeHHD) {
+            echo "  PhotoTAN Image (base64): " . substr(base64_encode($challengeHHD), 0, 100) . "...\n";
         }
     } catch (\Throwable $t) {
         echo "✗ Error: " . get_class($t) . "\n";
