@@ -163,8 +163,44 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
         $fints = \Fhp\FinTs::new($options, $credentials);
         echo "✓ FinTs object created\n";
 
-        // Step 1: Login
-        echo "Logging in...\n";
+        // Step 1: Get and select TAN mode
+        echo "\nAvailable TAN modes:\n";
+        $tanModes = $fints->getTanModes();
+        $selectedMode = null;
+        foreach ($tanModes as $tanMode) {
+            echo "  - " . $tanMode->getId() . ": " . $tanMode->getName() . "\n";
+            // Select photoTAN or first available
+            if ($selectedMode === null || stripos($tanMode->getName(), 'photo') !== false) {
+                $selectedMode = $tanMode;
+            }
+        }
+
+        if ($selectedMode) {
+            echo "\nSelecting TAN mode: " . $selectedMode->getId() . " (" . $selectedMode->getName() . ")\n";
+
+            // Check if TAN medium is needed
+            if ($selectedMode->needsTanMedium()) {
+                echo "  TAN medium required, getting media list...\n";
+                $tanMedia = $fints->getTanMedia($selectedMode);
+                if (!empty($tanMedia)) {
+                    echo "  Available TAN media:\n";
+                    foreach ($tanMedia as $medium) {
+                        echo "    - " . $medium->getName() . "\n";
+                    }
+                    // Select first medium
+                    $fints->selectTanMode($selectedMode, $tanMedia[0]->getName());
+                    echo "  Selected TAN medium: " . $tanMedia[0]->getName() . "\n";
+                } else {
+                    $fints->selectTanMode($selectedMode);
+                }
+            } else {
+                $fints->selectTanMode($selectedMode);
+            }
+            echo "✓ TAN mode selected\n";
+        }
+
+        // Step 2: Login
+        echo "\nLogging in...\n";
         flush();
         $login = $fints->login();
         if ($login->needsTan()) {
@@ -176,13 +212,6 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
             }
         } else {
             echo "✓ Login successful (no TAN needed)\n";
-        }
-
-        // Show TAN modes
-        echo "\nAvailable TAN modes:\n";
-        $tanModes = $fints->getTanModes();
-        foreach ($tanModes as $tanMode) {
-            echo "  - " . $tanMode->getId() . ": " . $tanMode->getName() . "\n";
         }
 
         // Step 2: Get SEPA accounts
