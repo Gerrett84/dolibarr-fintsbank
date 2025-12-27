@@ -230,13 +230,16 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
             echo "  ============================\n\n";
 
             if ($challengeHhdUc && strlen($challengeHhdUc) > 100) {
-                echo "  PhotoTAN Image available\n";
-                // Output image for display
-                echo "\n  === PHOTOTAN IMAGE (PNG) ===\n";
-                echo '  <img src="data:image/png;base64,' . base64_encode($challengeHhdUc) . '" alt="PhotoTAN" style="max-width:300px;" />' . "\n";
-                echo "  ============================\n\n";
+                echo "  PhotoTAN Image available (" . strlen($challengeHhdUc) . " bytes)\n";
+                // Close pre tag, show image, reopen pre tag
+                echo "</pre>\n";
+                echo '<div style="border:2px solid #000; padding:10px; margin:10px 0; background:#fff; display:inline-block;">';
+                echo '<p><strong>Scannen Sie dieses Bild mit Ihrer photoTAN-App:</strong></p>';
+                echo '<img src="data:image/png;base64,' . base64_encode($challengeHhdUc) . '" alt="PhotoTAN Challenge" style="max-width:400px; display:block;" />';
+                echo '</div>';
+                echo "\n<pre>\n";
             } elseif ($challengeHhdUc) {
-                echo "  HHD/UC data (raw hex): " . bin2hex($challengeHhdUc) . "\n\n";
+                echo "  HHD/UC data (raw hex, first 100 chars): " . substr(bin2hex($challengeHhdUc), 0, 100) . "...\n\n";
             }
 
             // Check if this is a decoupled (push) TAN
