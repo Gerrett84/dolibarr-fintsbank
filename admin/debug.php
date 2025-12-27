@@ -5,12 +5,7 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-// Start session for TAN state persistence
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Load Dolibarr environment
+// Load Dolibarr environment FIRST (it handles sessions)
 $res = 0;
 if (!$res && file_exists("../../main.inc.php")) {
     $res = include "../../main.inc.php";
@@ -249,12 +244,32 @@ if (isset($_GET['tan']) && !empty($_GET['tan']) && isset($_SESSION['fints_debug_
         echo "\nAvailable TAN modes:\n";
         $tanModes = $fints->getTanModes();
         $selectedMode = null;
+        $mode999 = null;
+        $modePhoto = null;
         foreach ($tanModes as $tanMode) {
-            echo "  - " . $tanMode->getId() . ": " . $tanMode->getName() . "\n";
-            // Select photoTAN or first available
-            if ($selectedMode === null || stripos($tanMode->getName(), 'photo') !== false) {
+            $id = $tanMode->getId();
+            $name = $tanMode->getName();
+            echo "  - " . $id . ": " . $name . "\n";
+
+            // Track special modes
+            if ($id == 999) {
+                $mode999 = $tanMode;
+                echo "    ^ Einschritt-Verfahren (keine TAN für Leseoperationen)\n";
+            }
+            if (stripos($name, 'photo') !== false) {
+                $modePhoto = $tanMode;
+            }
+            if ($selectedMode === null) {
                 $selectedMode = $tanMode;
             }
+        }
+
+        // Check if user wants to try mode 999
+        if (isset($_GET['mode']) && $_GET['mode'] == '999' && $mode999) {
+            $selectedMode = $mode999;
+            echo "\n⚡ Using mode 999 (Einschritt) as requested\n";
+        } elseif ($modePhoto) {
+            $selectedMode = $modePhoto;
         }
 
         if ($selectedMode) {
