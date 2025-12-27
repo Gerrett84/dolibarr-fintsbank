@@ -5,6 +5,11 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+// Start session for TAN state persistence
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 // Load Dolibarr environment
 $res = 0;
 if (!$res && file_exists("../../main.inc.php")) {
@@ -142,11 +147,88 @@ if (file_exists($composerLock)) {
 
 // Check 6: Test with actual PIN (if provided via GET for testing only)
 echo "\n=== 6. Live Connection Test ===\n";
-if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
+
+// Check if we're submitting a TAN for an existing session
+if (isset($_GET['tan']) && !empty($_GET['tan']) && isset($_SESSION['fints_debug_state'])) {
+    echo "Submitting TAN for existing session...\n";
+    flush();
+
+    try {
+        $acc = $accounts[0];
+        $testPin = $_SESSION['fints_debug_pin'];
+        $productName = !empty($acc->product_name) ? $acc->product_name : '0F4CA8A225AC9799E6BE3F334';
+
+        $options = new \Fhp\Options\FinTsOptions();
+        $options->url = $acc->fints_url;
+        $options->bankCode = $acc->bank_code;
+        $options->productName = $productName;
+        $options->productVersion = '1.0';
+
+        $credentials = \Fhp\Options\Credentials::create($acc->username, $testPin);
+
+        // Restore persisted state
+        $fints = \Fhp\FinTs::new($options, $credentials, $_SESSION['fints_debug_state']);
+        echo "✓ FinTs session restored\n";
+
+        // Restore the login action
+        $login = unserialize($_SESSION['fints_debug_login']);
+
+        // Submit TAN
+        echo "Submitting TAN: " . $_GET['tan'] . "\n";
+        $fints->submitTan($login, $_GET['tan']);
+
+        if ($login->needsTan()) {
+            echo "⚠ Another TAN required!\n";
+            // Save state again
+            $_SESSION['fints_debug_state'] = $fints->persist();
+            $_SESSION['fints_debug_login'] = serialize($login);
+        } else {
+            echo "✓ TAN accepted, login complete!\n";
+
+            // Clear session state
+            unset($_SESSION['fints_debug_state']);
+            unset($_SESSION['fints_debug_login']);
+            unset($_SESSION['fints_debug_pin']);
+
+            // Now get SEPA accounts
+            echo "\nGetting SEPA accounts...\n";
+            $getSepaAccounts = \Fhp\Action\GetSEPAAccounts::create();
+            $fints->execute($getSepaAccounts);
+
+            if ($getSepaAccounts->needsTan()) {
+                echo "⚠ TAN required for account list!\n";
+            } else {
+                $sepaAccounts = $getSepaAccounts->getAccounts();
+                echo "✓ Got " . count($sepaAccounts) . " SEPA account(s):\n";
+                foreach ($sepaAccounts as $sepa) {
+                    echo "  - IBAN: " . $sepa->getIban() . "\n";
+                    echo "    Account: " . $sepa->getAccountNumber() . "\n";
+                }
+            }
+        }
+
+        $fints->close();
+        echo "\n✓ Connection closed\n";
+
+    } catch (\Throwable $t) {
+        echo "✗ Error: " . get_class($t) . "\n";
+        echo "  Message: " . $t->getMessage() . "\n";
+        // Clear session on error
+        unset($_SESSION['fints_debug_state']);
+        unset($_SESSION['fints_debug_login']);
+        unset($_SESSION['fints_debug_pin']);
+    }
+
+} elseif (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
     $acc = $accounts[0];
     $testPin = $_GET['pin'];
     echo "Testing LIVE connection with real PIN...\n";
     flush();
+
+    // Clear any old session state
+    unset($_SESSION['fints_debug_state']);
+    unset($_SESSION['fints_debug_login']);
+    unset($_SESSION['fints_debug_pin']);
 
     try {
         // php-fints 3.x API - FinTsOptions and Credentials
@@ -387,18 +469,26 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
                     echo '<p><strong>Timeout! Bitte erneut versuchen und in der App bestätigen.</strong></p>';
                     exit;
                 }
-            } elseif (isset($_GET['tan']) && !empty($_GET['tan'])) {
-                // Manual TAN entry
-                echo "  Submitting TAN...\n";
-                $fints->submitTan($login, $_GET['tan']);
-                echo "✓ TAN submitted, login complete\n";
             } else {
-                echo "\n  📱 Bitte bestätigen Sie die Anfrage in Ihrer photoTAN-App!\n";
-                echo "  ➡ Oder: Falls Sie eine TAN eingeben müssen, laden Sie mit &tan=IHRE_TAN neu\n";
-                echo "  ➡ Oder: Laden Sie mit &check=1 neu um auf App-Bestätigung zu warten\n";
-                $fints->close();
+                // Save state for TAN submission
+                $_SESSION['fints_debug_state'] = $fints->persist();
+                $_SESSION['fints_debug_login'] = serialize($login);
+                $_SESSION['fints_debug_pin'] = $testPin;
+
+                echo "\n  📱 Scannen Sie das Bild mit Ihrer photoTAN-App!\n";
+                echo "  ➡ Geben Sie die TAN ein: ?tan=IHRE_TAN\n";
+                echo "  ➡ Oder bei Push-TAN: ?check=1\n";
+                echo "\n  Session gespeichert - Sie können jetzt die TAN eingeben.\n";
+
                 echo "\n</pre>";
-                echo '<p><strong>Bestätigen Sie die Anfrage in der Commerzbank photoTAN-App, dann laden Sie mit ?pin=YOUR_PIN&check=1 neu</strong></p>';
+                echo '<div style="border:2px solid blue; padding:10px; margin:10px; background:#f0f8ff;">';
+                echo '<p><strong>Nächster Schritt:</strong></p>';
+                echo '<form method="get" action="">';
+                echo '<label>TAN eingeben: <input type="text" name="tan" size="10" autofocus /></label>';
+                echo ' <button type="submit">Absenden</button>';
+                echo '</form>';
+                echo '<p style="font-size:12px; color:#666;">Oder URL: ?tan=IHRE_TAN</p>';
+                echo '</div>';
                 exit;
             }
         } else {
