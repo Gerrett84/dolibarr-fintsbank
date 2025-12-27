@@ -59,6 +59,7 @@ if (count($accounts) > 0) {
         echo "  Username: '" . $acc->username . "'\n";
         echo "  Username contains special chars: " . (preg_match('/[^a-zA-Z0-9]/', $acc->username) ? "⚠ Yes" : "✓ No") . "\n";
         echo "  IBAN: '" . $acc->iban . "'\n";
+        echo "  Product Name: '" . $acc->product_name . "'\n";
         echo "\n";
     }
 } else {
@@ -83,16 +84,17 @@ if (class_exists('Fhp\FinTs') && count($accounts) > 0) {
         echo "    Customer ID: '" . ($acc->customer_id ?: $acc->username) . "'\n\n";
         flush();
 
-        // php-fints 2.1 API - direct constructor
-        $productName = !empty($acc->product_name) ? $acc->product_name : '9FA6681DDE0E03F8CAB8';
-        $fints = new \Fhp\FinTs(
-            $acc->fints_url,
-            $acc->bank_code,
-            $acc->username,
-            'TESTPIN123',
-            $productName,
-            '1.0.0'
-        );
+        // php-fints 3.x API - FinTsOptions and Credentials
+        $productName = !empty($acc->product_name) ? $acc->product_name : '0F4CA8A225AC9799E6BE3F334';
+
+        $options = new \Fhp\Options\FinTsOptions();
+        $options->url = $acc->fints_url;
+        $options->bankCode = $acc->bank_code;
+        $options->productName = $productName;
+        $options->productVersion = '1.0';
+
+        $credentials = \Fhp\Options\Credentials::create($acc->username, 'TESTPIN123');
+        $fints = \Fhp\FinTs::new($options, $credentials);
         echo "✓ FinTs object created successfully (validation passed)\n";
         echo "  Note: This doesn't mean the PIN is correct, just that the format is valid.\n";
     } catch (\InvalidArgumentException $e) {
@@ -147,70 +149,36 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
     flush();
 
     try {
-        // php-fints 2.1 API - direct constructor
-        $productName = !empty($acc->product_name) ? $acc->product_name : '9FA6681DDE0E03F8CAB8';
-        $fints = new \Fhp\FinTs(
-            $acc->fints_url,
-            $acc->bank_code,
-            $acc->username,
-            $testPin,
-            $productName,
-            '1.0.0'
-        );
+        // php-fints 3.x API - FinTsOptions and Credentials
+        $productName = !empty($acc->product_name) ? $acc->product_name : '0F4CA8A225AC9799E6BE3F334';
+        echo "  Using product name: " . $productName . "\n";
+
+        $options = new \Fhp\Options\FinTsOptions();
+        $options->url = $acc->fints_url;
+        $options->bankCode = $acc->bank_code;
+        $options->productName = $productName;
+        $options->productVersion = '1.0';
+
+        $credentials = \Fhp\Options\Credentials::create($acc->username, $testPin);
+        $fints = \Fhp\FinTs::new($options, $credentials);
         echo "✓ FinTs object created\n";
-
-        // Step 1: Login first (required in php-fints 2.1)
-        echo "Attempting login...\n";
-        flush();
-
-        // TAN callback for photoTAN
-        $tanCallback = function(\Fhp\Response\GetTANRequest $tanRequest) {
-            echo "\n⚠ TAN REQUIRED!\n";
-            echo "  Challenge: " . $tanRequest->getTanChallenge() . "\n";
-            $challengeHHD = $tanRequest->getTanChallengeHHD();
-            if ($challengeHHD) {
-                echo "  PhotoTAN Image (base64): " . base64_encode($challengeHHD) . "\n";
-            }
-            echo "  Add &tan=YOUR_TAN to the URL to continue\n";
-            // Return empty to abort - in real code we'd wait for user input
-            return isset($_GET['tan']) ? $_GET['tan'] : '';
-        };
-
-        try {
-            $fints->login(null, null, $tanCallback);
-            echo "✓ Login successful\n";
-        } catch (\Exception $e) {
-            if (strpos($e->getMessage(), 'Sicherheitsfunktionen') !== false) {
-                echo "  Available TAN mechanisms: " . $e->getMessage() . "\n";
-                echo "  Using first available mechanism...\n";
-                // Try with mechanism 900 (common for photoTAN)
-                $fints->login(900, null, $tanCallback);
-                echo "✓ Login successful with mechanism 900\n";
-            } else {
-                throw $e;
-            }
-        }
 
         echo "Attempting to get SEPA accounts...\n";
         flush();
-        $sepaAccounts = $fints->getSEPAAccounts($tanCallback);
+        $sepaAccounts = $fints->getSEPAAccounts();
         echo "✓ Got " . count($sepaAccounts) . " SEPA account(s):\n";
         foreach ($sepaAccounts as $sepa) {
             echo "  - IBAN: " . $sepa->getIban() . "\n";
+            echo "    Account: " . $sepa->getAccountNumber() . "\n";
         }
 
-        // End session
-        $fints->end();
-        echo "✓ Session ended\n";
-
-    } catch (\Fhp\Dialog\Exception\TANRequiredException $e) {
-        echo "\n⚠ TAN REQUIRED!\n";
-        echo "  Challenge: " . $e->getResponse()->getTanChallenge() . "\n";
-        echo "  TAN Token: " . $e->getTANToken() . "\n";
-        $challengeHHD = $e->getResponse()->getTanChallengeHHD();
-        if ($challengeHHD) {
-            echo "  PhotoTAN Image (base64): " . substr(base64_encode($challengeHHD), 0, 100) . "...\n";
+        // Try to get TAN modes
+        echo "\nAvailable TAN modes:\n";
+        $tanModes = $fints->getTanModes();
+        foreach ($tanModes as $tanMode) {
+            echo "  - " . $tanMode->getId() . ": " . $tanMode->getName() . "\n";
         }
+
     } catch (\Throwable $t) {
         echo "✗ Error: " . get_class($t) . "\n";
         echo "  Message: " . $t->getMessage() . "\n";

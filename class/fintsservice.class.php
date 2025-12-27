@@ -10,7 +10,7 @@
 /**
  * \file       class/fintsservice.class.php
  * \ingroup    fintsbank
- * \brief      FinTS connection and sync service (php-fints 2.1 compatible)
+ * \brief      FinTS connection and sync service (php-fints 3.x compatible)
  */
 
 // Load php-fints library if available
@@ -23,10 +23,11 @@ dol_include_once('/fintsbank/class/fintsaccount.class.php');
 dol_include_once('/fintsbank/class/fintstransaction.class.php');
 
 use Fhp\FinTs;
-use Fhp\Dialog\Exception\TANRequiredException;
+use Fhp\Options\FinTsOptions;
+use Fhp\Options\Credentials;
 
 /**
- * Class FintsService - Handles FinTS connections and synchronization (php-fints 2.1)
+ * Class FintsService - Handles FinTS connections and synchronization (php-fints 3.x)
  */
 class FintsService
 {
@@ -85,9 +86,10 @@ class FintsService
      *
      * @param FintsAccount $account Account configuration
      * @param string $pin User's banking PIN
+     * @param string|null $persistedInstance Persisted instance data
      * @return bool Success
      */
-    public function initConnection($account, $pin)
+    public function initConnection($account, $pin, $persistedInstance = null)
     {
         if (!self::isLibraryAvailable()) {
             $this->error = 'php-fints library not installed';
@@ -117,19 +119,22 @@ class FintsService
         try {
             error_log("FinTS: Connecting to " . $account->fints_url);
 
-            // Product name - use configured or fallback
-            $productName = !empty($account->product_name) ? $account->product_name : '9FA6681DDE0E03F8CAB8';
-            $productVersion = '1.0.0';
+            // Create FinTS options (php-fints 3.x API)
+            $options = new FinTsOptions();
+            $options->url = $account->fints_url;
+            $options->bankCode = $account->bank_code;
+            $options->productName = !empty($account->product_name) ? $account->product_name : '0F4CA8A225AC9799E6BE3F334';
+            $options->productVersion = '1.0';
 
-            // Create FinTS instance (php-fints 2.1 API)
-            $this->fints = new FinTs(
-                $account->fints_url,
-                $account->bank_code,
-                $account->username,
-                $pin,
-                $productName,
-                $productVersion
-            );
+            // Create credentials
+            $credentials = Credentials::create($account->username, $pin);
+
+            // Create FinTS instance
+            if ($persistedInstance) {
+                $this->fints = FinTs::new($options, $credentials, $persistedInstance);
+            } else {
+                $this->fints = FinTs::new($options, $credentials);
+            }
 
             return true;
         } catch (\Exception $e) {
@@ -137,6 +142,16 @@ class FintsService
             error_log("FinTS Exception: " . $e->getMessage());
             return false;
         }
+    }
+
+    /**
+     * Get the FinTs instance
+     *
+     * @return FinTs|null
+     */
+    public function getFinTs()
+    {
+        return $this->fints;
     }
 
     /**
@@ -154,11 +169,6 @@ class FintsService
         try {
             $accounts = $this->fints->getSEPAAccounts();
             return $accounts;
-        } catch (TANRequiredException $e) {
-            // TAN required for account list - store state
-            $this->saveState('getSEPAAccounts', $e);
-            $this->error = 'TAN_REQUIRED';
-            return false;
         } catch (\Exception $e) {
             $this->error = $e->getMessage();
             return false;
@@ -184,14 +194,21 @@ class FintsService
         }
 
         try {
+            // Get persisted instance from session if available
+            $persistedInstance = isset($_SESSION[self::SESSION_KEY . '_persisted'])
+                ? $_SESSION[self::SESSION_KEY . '_persisted']
+                : null;
+
             // Initialize connection
-            if (!$this->initConnection($this->account, $pin)) {
+            if (!$this->initConnection($this->account, $pin, $persistedInstance)) {
                 return array('success' => false, 'error' => $this->error);
             }
 
-            // Store PIN for TAN continuation
+            // Store credentials for TAN continuation
             $_SESSION[self::SESSION_KEY . '_pin'] = $pin;
             $_SESSION[self::SESSION_KEY . '_account_id'] = $this->account->id;
+            $_SESSION[self::SESSION_KEY . '_from_date'] = $fromDate->format('Y-m-d');
+            $_SESSION[self::SESSION_KEY . '_to_date'] = $toDate ? $toDate->format('Y-m-d') : null;
 
             // Get SEPA accounts
             $sepaAccounts = $this->fints->getSEPAAccounts();
@@ -211,39 +228,43 @@ class FintsService
                 $targetAccount = $sepaAccounts[0];
             }
 
+            // Store selected account IBAN
+            $_SESSION[self::SESSION_KEY . '_target_iban'] = $targetAccount->getIban();
+
             // Get statements
             if (!$toDate) {
                 $toDate = new \DateTime();
             }
 
-            $statements = $this->fints->getStatementOfAccount($targetAccount, $fromDate, $toDate);
+            $getStatement = \Fhp\Action\GetStatementOfAccount::create($targetAccount, $fromDate, $toDate);
+            $this->fints->execute($getStatement);
 
-            // Process statements
-            return $this->processStatements($statements);
+            if ($getStatement->needsTan()) {
+                // TAN required - persist state and return challenge
+                $_SESSION[self::SESSION_KEY . '_persisted'] = $this->fints->persist();
+                $_SESSION[self::SESSION_KEY . '_action'] = serialize($getStatement);
 
-        } catch (TANRequiredException $e) {
-            // TAN required - return challenge info
-            $response = $e->getResponse();
+                $tanRequest = $getStatement->getTanRequest();
+                $result = array(
+                    'success' => true,
+                    'needsTan' => true,
+                    'challenge' => $tanRequest->getChallenge(),
+                    'tanMediumName' => $tanRequest->getTanMediumName(),
+                );
 
-            $result = array(
-                'success' => true,
-                'needsTan' => true,
-                'tanToken' => $e->getTANToken(),
-                'challenge' => $response->getTanChallenge(),
-                'tanMediumName' => $e->getTanMediaName(),
-            );
+                // Check for photoTAN/chipTAN image
+                $challengeHhdUc = $tanRequest->getChallengeHhdUc();
+                if ($challengeHhdUc) {
+                    $result['challengeImage'] = base64_encode($challengeHhdUc);
+                    $result['challengeType'] = 'phototan';
+                }
 
-            // Check for photoTAN/chipTAN image
-            $challengeHHD = $response->getTanChallengeHHD();
-            if ($challengeHHD) {
-                $result['challengeImage'] = base64_encode($challengeHHD);
-                $result['challengeType'] = 'phototan';
+                return $result;
             }
 
-            // Store state for continuation
-            $_SESSION[self::SESSION_KEY . '_tan_token'] = $e->getTANToken();
-
-            return $result;
+            // No TAN needed - process statements
+            $statements = $getStatement->getStatements();
+            return $this->processStatements($statements);
 
         } catch (\Exception $e) {
             return array('success' => false, 'error' => $e->getMessage());
@@ -262,9 +283,10 @@ class FintsService
             // Load stored state
             $pin = isset($_SESSION[self::SESSION_KEY . '_pin']) ? $_SESSION[self::SESSION_KEY . '_pin'] : null;
             $accountId = isset($_SESSION[self::SESSION_KEY . '_account_id']) ? $_SESSION[self::SESSION_KEY . '_account_id'] : null;
-            $tanToken = isset($_SESSION[self::SESSION_KEY . '_tan_token']) ? $_SESSION[self::SESSION_KEY . '_tan_token'] : null;
+            $persistedInstance = isset($_SESSION[self::SESSION_KEY . '_persisted']) ? $_SESSION[self::SESSION_KEY . '_persisted'] : null;
+            $serializedAction = isset($_SESSION[self::SESSION_KEY . '_action']) ? $_SESSION[self::SESSION_KEY . '_action'] : null;
 
-            if (!$pin || !$accountId || !$tanToken) {
+            if (!$pin || !$accountId || !$persistedInstance || !$serializedAction) {
                 return array('success' => false, 'error' => 'Session expired. Please start again.');
             }
 
@@ -274,40 +296,37 @@ class FintsService
                 return array('success' => false, 'error' => 'Account not found');
             }
 
-            // Reinitialize connection
-            if (!$this->initConnection($this->account, $pin)) {
+            // Reinitialize connection with persisted state
+            if (!$this->initConnection($this->account, $pin, $persistedInstance)) {
                 return array('success' => false, 'error' => $this->error);
             }
 
+            // Restore action
+            $getStatement = unserialize($serializedAction);
+
             // Submit TAN
-            $result = $this->fints->submitTanForToken($tanToken, $tan);
+            $this->fints->submitTan($getStatement, $tan);
+
+            if ($getStatement->needsTan()) {
+                // Another TAN required
+                $_SESSION[self::SESSION_KEY . '_persisted'] = $this->fints->persist();
+                $_SESSION[self::SESSION_KEY . '_action'] = serialize($getStatement);
+
+                $tanRequest = $getStatement->getTanRequest();
+                return array(
+                    'success' => true,
+                    'needsTan' => true,
+                    'challenge' => $tanRequest->getChallenge(),
+                    'error' => 'Additional TAN required'
+                );
+            }
 
             // Clear session
             $this->clearState();
 
-            // Process result (should contain statement data)
-            if ($result instanceof \Fhp\Model\StatementOfAccount\StatementOfAccount) {
-                return $this->processStatements($result);
-            }
-
-            return array(
-                'success' => true,
-                'needsTan' => false,
-                'message' => 'TAN submitted successfully'
-            );
-
-        } catch (TANRequiredException $e) {
-            // Another TAN required
-            $response = $e->getResponse();
-            $_SESSION[self::SESSION_KEY . '_tan_token'] = $e->getTANToken();
-
-            return array(
-                'success' => true,
-                'needsTan' => true,
-                'tanToken' => $e->getTANToken(),
-                'challenge' => $response->getTanChallenge(),
-                'error' => 'Additional TAN required'
-            );
+            // Process statements
+            $statements = $getStatement->getStatements();
+            return $this->processStatements($statements);
 
         } catch (\Exception $e) {
             $this->clearState();
@@ -318,7 +337,7 @@ class FintsService
     /**
      * Process statements and import transactions
      *
-     * @param mixed $statements Statement data
+     * @param array $statements Statement data
      * @return array Status array
      */
     private function processStatements($statements)
@@ -327,7 +346,7 @@ class FintsService
         $skipped = 0;
 
         try {
-            if (!$statements) {
+            if (!$statements || count($statements) == 0) {
                 return array(
                     'success' => true,
                     'needsTan' => false,
@@ -337,52 +356,39 @@ class FintsService
                 );
             }
 
-            // Handle different return types
-            $statementList = is_array($statements) ? $statements : array($statements);
+            foreach ($statements as $statement) {
+                foreach ($statement->getTransactions() as $transaction) {
+                    $fintsTransaction = new FintsTransaction($this->db);
+                    $fintsTransaction->fk_fintsbank_account = $this->account->id;
 
-            foreach ($statementList as $statement) {
-                if (!method_exists($statement, 'getStatements')) {
-                    continue;
-                }
+                    // Generate unique ID
+                    $fintsTransaction->transaction_id = md5(
+                        $transaction->getBookingDate()->format('Y-m-d') .
+                        $transaction->getAmount() .
+                        $transaction->getDescription1() .
+                        $transaction->getAccountNumber()
+                    );
 
-                foreach ($statement->getStatements() as $stmtDay) {
-                    if (!method_exists($stmtDay, 'getTransactions')) {
+                    // Check if exists
+                    if ($fintsTransaction->fetchByTransactionId($fintsTransaction->transaction_id, $this->account->id)) {
+                        $skipped++;
                         continue;
                     }
 
-                    foreach ($stmtDay->getTransactions() as $transaction) {
-                        $fintsTransaction = new FintsTransaction($this->db);
-                        $fintsTransaction->fk_fintsbank_account = $this->account->id;
+                    // Fill data
+                    $fintsTransaction->booking_date = $transaction->getBookingDate()->getTimestamp();
+                    $fintsTransaction->value_date = $transaction->getValutaDate() ? $transaction->getValutaDate()->getTimestamp() : null;
+                    $fintsTransaction->amount = $transaction->getAmount();
+                    $fintsTransaction->currency = 'EUR';
+                    $fintsTransaction->name = $transaction->getName();
+                    $fintsTransaction->iban = $transaction->getAccountNumber();
+                    $fintsTransaction->bic = $transaction->getBankCode();
+                    $fintsTransaction->description = $transaction->getDescription1() . ' ' . $transaction->getDescription2();
+                    $fintsTransaction->booking_text = $transaction->getBookingText();
+                    $fintsTransaction->end_to_end_id = $transaction->getEndToEndID();
 
-                        // Generate unique ID
-                        $fintsTransaction->transaction_id = md5(
-                            $transaction->getBookingDate()->format('Y-m-d') .
-                            $transaction->getAmount() .
-                            $transaction->getDescription1() .
-                            $transaction->getAccountNumber()
-                        );
-
-                        // Check if exists
-                        if ($fintsTransaction->fetchByTransactionId($fintsTransaction->transaction_id, $this->account->id)) {
-                            $skipped++;
-                            continue;
-                        }
-
-                        // Fill data
-                        $fintsTransaction->booking_date = $transaction->getBookingDate()->getTimestamp();
-                        $fintsTransaction->value_date = $transaction->getValutaDate() ? $transaction->getValutaDate()->getTimestamp() : null;
-                        $fintsTransaction->amount = $transaction->getAmount();
-                        $fintsTransaction->currency = 'EUR';
-                        $fintsTransaction->name = $transaction->getName();
-                        $fintsTransaction->iban = $transaction->getAccountNumber();
-                        $fintsTransaction->bic = $transaction->getBankCode();
-                        $fintsTransaction->description = $transaction->getDescription1() . ' ' . $transaction->getDescription2();
-                        $fintsTransaction->booking_text = $transaction->getBookingText();
-                        $fintsTransaction->end_to_end_id = $transaction->getEndToEndID();
-
-                        if ($fintsTransaction->create() > 0) {
-                            $imported++;
-                        }
+                    if ($fintsTransaction->create() > 0) {
+                        $imported++;
                     }
                 }
             }
@@ -404,23 +410,17 @@ class FintsService
     }
 
     /**
-     * Save state for TAN continuation
-     */
-    private function saveState($action, $exception)
-    {
-        $_SESSION[self::SESSION_KEY . '_action'] = $action;
-        $_SESSION[self::SESSION_KEY . '_tan_token'] = $exception->getTANToken();
-    }
-
-    /**
      * Clear saved state
      */
     private function clearState()
     {
         unset($_SESSION[self::SESSION_KEY . '_pin']);
         unset($_SESSION[self::SESSION_KEY . '_account_id']);
-        unset($_SESSION[self::SESSION_KEY . '_tan_token']);
+        unset($_SESSION[self::SESSION_KEY . '_persisted']);
         unset($_SESSION[self::SESSION_KEY . '_action']);
+        unset($_SESSION[self::SESSION_KEY . '_from_date']);
+        unset($_SESSION[self::SESSION_KEY . '_to_date']);
+        unset($_SESSION[self::SESSION_KEY . '_target_iban']);
     }
 
     /**
