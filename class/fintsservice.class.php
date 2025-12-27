@@ -118,7 +118,28 @@ class FintsService
 
         $this->account = $account;
 
+        // Validate inputs before calling library
+        if (empty($account->fints_url)) {
+            $this->error = 'FinTS URL is not configured';
+            return false;
+        }
+        if (empty($account->bank_code) || !preg_match('/^[0-9]{8}$/', $account->bank_code)) {
+            $this->error = 'Invalid bank code (BLZ). Must be 8 digits. Current: ' . $account->bank_code;
+            return false;
+        }
+        if (empty($account->username)) {
+            $this->error = 'Username is not configured';
+            return false;
+        }
+        if (empty($pin)) {
+            $this->error = 'PIN is required';
+            return false;
+        }
+
         try {
+            // Log connection attempt (for debugging)
+            error_log("FinTS: Connecting to " . $account->fints_url . " with bank code " . $account->bank_code);
+
             // Create FinTS instance
             $this->fints = FinTs::new(
                 $account->fints_url,
@@ -129,8 +150,13 @@ class FintsService
             );
 
             return true;
-        } catch (Exception $e) {
-            $this->error = $e->getMessage();
+        } catch (\InvalidArgumentException $e) {
+            $this->error = 'Configuration error: ' . $e->getMessage();
+            error_log("FinTS InvalidArgumentException: " . $e->getMessage());
+            return false;
+        } catch (\Exception $e) {
+            $this->error = 'Connection error: ' . $e->getMessage();
+            error_log("FinTS Exception: " . $e->getMessage() . "\n" . $e->getTraceAsString());
             return false;
         }
     }

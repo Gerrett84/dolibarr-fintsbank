@@ -65,7 +65,8 @@ switch ($action) {
     case 'start':
         // Start sync process
         $id = GETPOST('id', 'int');
-        $pin = GETPOST('pin', 'none'); // Don't sanitize PIN
+        // Get PIN directly from POST to avoid any sanitization
+        $pin = isset($_POST['pin']) ? $_POST['pin'] : '';
         $syncFrom = GETPOST('sync_from', 'alpha');
 
         if (!$id) {
@@ -85,8 +86,15 @@ switch ($action) {
             exit;
         }
 
+        // Debug: Log account details (remove in production)
+        error_log("FinTS Sync - Account: " . $account->bank_code . ", URL: " . $account->fints_url . ", User: " . $account->username);
+
         // Set sync date
-        $fromDate = new DateTime($syncFrom ?: '-30 days');
+        try {
+            $fromDate = new DateTime($syncFrom ?: '-30 days');
+        } catch (Exception $e) {
+            $fromDate = new DateTime('-30 days');
+        }
 
         // Start sync
         $service->setAccount($account);
