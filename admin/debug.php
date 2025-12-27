@@ -207,14 +207,34 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
             echo "⚠ TAN required for login!\n";
             $tanRequest = $login->getTanRequest();
             echo "  Challenge: " . $tanRequest->getChallenge() . "\n";
-            if ($tanRequest->getChallengeHhdUc()) {
-                echo "  PhotoTAN available\n";
+
+            $challengeHhdUc = $tanRequest->getChallengeHhdUc();
+            if ($challengeHhdUc) {
+                echo "  PhotoTAN Image available\n";
+                // Output image for display
+                echo "\n  === PHOTOTAN IMAGE (PNG) ===\n";
+                echo '  <img src="data:image/png;base64,' . base64_encode($challengeHhdUc) . '" alt="PhotoTAN" />' . "\n";
+                echo "  ============================\n\n";
+            }
+
+            // Check if TAN was provided
+            if (isset($_GET['tan']) && !empty($_GET['tan'])) {
+                echo "  Submitting TAN...\n";
+                $fints->submitTan($login, $_GET['tan']);
+                echo "✓ TAN submitted, login complete\n";
+            } else {
+                echo "\n  ➡ To continue, add &tan=YOUR_TAN to the URL\n";
+                echo "  (Scan the photoTAN image with your Commerzbank app)\n";
+                $fints->close();
+                echo "\n</pre>";
+                echo '<p><strong>Scan the image above with your Commerzbank photoTAN app, then reload with ?pin=YOUR_PIN&tan=YOUR_TAN</strong></p>';
+                exit;
             }
         } else {
             echo "✓ Login successful (no TAN needed)\n";
         }
 
-        // Step 2: Get SEPA accounts
+        // Step 3: Get SEPA accounts
         echo "\nGetting SEPA accounts...\n";
         flush();
         $getSepaAccounts = \Fhp\Action\GetSEPAAccounts::create();
