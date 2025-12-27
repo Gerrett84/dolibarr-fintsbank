@@ -217,17 +217,51 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
                 echo "  ============================\n\n";
             }
 
-            // Check if TAN was provided
-            if (isset($_GET['tan']) && !empty($_GET['tan'])) {
+            // Check if this is a decoupled (push) TAN
+            $isDecoupled = method_exists($tanRequest, 'isDecoupled') && $tanRequest->isDecoupled();
+
+            if ($isDecoupled || isset($_GET['check'])) {
+                // Decoupled TAN - check if user confirmed in app
+                echo "  📱 Push-TAN: Bitte in der photoTAN-App bestätigen...\n";
+                flush();
+
+                // Poll for confirmation (max 60 seconds)
+                $maxWait = 60;
+                $interval = 3;
+                $confirmed = false;
+
+                for ($i = 0; $i < $maxWait / $interval; $i++) {
+                    echo "  Warte auf Bestätigung... (" . ($i * $interval) . "s)\n";
+                    flush();
+
+                    if ($fints->checkDecoupledSubmission($login)) {
+                        $confirmed = true;
+                        break;
+                    }
+                    sleep($interval);
+                }
+
+                if ($confirmed) {
+                    echo "✓ Push-TAN bestätigt, Login erfolgreich!\n";
+                } else {
+                    echo "✗ Timeout - keine Bestätigung erhalten\n";
+                    $fints->close();
+                    echo "\n</pre>";
+                    echo '<p><strong>Timeout! Bitte erneut versuchen und in der App bestätigen.</strong></p>';
+                    exit;
+                }
+            } elseif (isset($_GET['tan']) && !empty($_GET['tan'])) {
+                // Manual TAN entry
                 echo "  Submitting TAN...\n";
                 $fints->submitTan($login, $_GET['tan']);
                 echo "✓ TAN submitted, login complete\n";
             } else {
-                echo "\n  ➡ To continue, add &tan=YOUR_TAN to the URL\n";
-                echo "  (Scan the photoTAN image with your Commerzbank app)\n";
+                echo "\n  📱 Bitte bestätigen Sie die Anfrage in Ihrer photoTAN-App!\n";
+                echo "  ➡ Oder: Falls Sie eine TAN eingeben müssen, laden Sie mit &tan=IHRE_TAN neu\n";
+                echo "  ➡ Oder: Laden Sie mit &check=1 neu um auf App-Bestätigung zu warten\n";
                 $fints->close();
                 echo "\n</pre>";
-                echo '<p><strong>Scan the image above with your Commerzbank photoTAN app, then reload with ?pin=YOUR_PIN&tan=YOUR_TAN</strong></p>';
+                echo '<p><strong>Bestätigen Sie die Anfrage in der Commerzbank photoTAN-App, dann laden Sie mit ?pin=YOUR_PIN&check=1 neu</strong></p>';
                 exit;
             }
         } else {
