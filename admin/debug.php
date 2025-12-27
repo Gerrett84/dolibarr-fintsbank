@@ -163,21 +163,50 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
         $fints = \Fhp\FinTs::new($options, $credentials);
         echo "✓ FinTs object created\n";
 
-        echo "Attempting to get SEPA accounts...\n";
+        // Step 1: Login
+        echo "Logging in...\n";
         flush();
-        $sepaAccounts = $fints->getSEPAAccounts();
-        echo "✓ Got " . count($sepaAccounts) . " SEPA account(s):\n";
-        foreach ($sepaAccounts as $sepa) {
-            echo "  - IBAN: " . $sepa->getIban() . "\n";
-            echo "    Account: " . $sepa->getAccountNumber() . "\n";
+        $login = $fints->login();
+        if ($login->needsTan()) {
+            echo "⚠ TAN required for login!\n";
+            $tanRequest = $login->getTanRequest();
+            echo "  Challenge: " . $tanRequest->getChallenge() . "\n";
+            if ($tanRequest->getChallengeHhdUc()) {
+                echo "  PhotoTAN available\n";
+            }
+        } else {
+            echo "✓ Login successful (no TAN needed)\n";
         }
 
-        // Try to get TAN modes
+        // Show TAN modes
         echo "\nAvailable TAN modes:\n";
         $tanModes = $fints->getTanModes();
         foreach ($tanModes as $tanMode) {
             echo "  - " . $tanMode->getId() . ": " . $tanMode->getName() . "\n";
         }
+
+        // Step 2: Get SEPA accounts
+        echo "\nGetting SEPA accounts...\n";
+        flush();
+        $getSepaAccounts = \Fhp\Action\GetSEPAAccounts::create();
+        $fints->execute($getSepaAccounts);
+
+        if ($getSepaAccounts->needsTan()) {
+            echo "⚠ TAN required for account list!\n";
+            $tanRequest = $getSepaAccounts->getTanRequest();
+            echo "  Challenge: " . $tanRequest->getChallenge() . "\n";
+        } else {
+            $sepaAccounts = $getSepaAccounts->getAccounts();
+            echo "✓ Got " . count($sepaAccounts) . " SEPA account(s):\n";
+            foreach ($sepaAccounts as $sepa) {
+                echo "  - IBAN: " . $sepa->getIban() . "\n";
+                echo "    Account: " . $sepa->getAccountNumber() . "\n";
+            }
+        }
+
+        // Close connection
+        $fints->close();
+        echo "\n✓ Connection closed\n";
 
     } catch (\Throwable $t) {
         echo "✗ Error: " . get_class($t) . "\n";

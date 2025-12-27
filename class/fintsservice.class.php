@@ -167,8 +167,15 @@ class FintsService
         }
 
         try {
-            $accounts = $this->fints->getSEPAAccounts();
-            return $accounts;
+            $getSepaAccounts = \Fhp\Action\GetSEPAAccounts::create();
+            $this->fints->execute($getSepaAccounts);
+
+            if ($getSepaAccounts->needsTan()) {
+                $this->error = 'TAN required for account list';
+                return false;
+            }
+
+            return $getSepaAccounts->getAccounts();
         } catch (\Exception $e) {
             $this->error = $e->getMessage();
             return false;
@@ -210,8 +217,39 @@ class FintsService
             $_SESSION[self::SESSION_KEY . '_from_date'] = $fromDate->format('Y-m-d');
             $_SESSION[self::SESSION_KEY . '_to_date'] = $toDate ? $toDate->format('Y-m-d') : null;
 
+            // Login first
+            $login = $this->fints->login();
+            if ($login->needsTan()) {
+                // TAN required for login - return challenge
+                $_SESSION[self::SESSION_KEY . '_persisted'] = $this->fints->persist();
+
+                $tanRequest = $login->getTanRequest();
+                $result = array(
+                    'success' => true,
+                    'needsTan' => true,
+                    'step' => 'login',
+                    'challenge' => $tanRequest->getChallenge(),
+                    'tanMediumName' => $tanRequest->getTanMediumName(),
+                );
+
+                $challengeHhdUc = $tanRequest->getChallengeHhdUc();
+                if ($challengeHhdUc) {
+                    $result['challengeImage'] = base64_encode($challengeHhdUc);
+                    $result['challengeType'] = 'phototan';
+                }
+
+                return $result;
+            }
+
             // Get SEPA accounts
-            $sepaAccounts = $this->fints->getSEPAAccounts();
+            $getSepaAccounts = \Fhp\Action\GetSEPAAccounts::create();
+            $this->fints->execute($getSepaAccounts);
+
+            if ($getSepaAccounts->needsTan()) {
+                return array('success' => false, 'error' => 'TAN required for account list - not supported yet');
+            }
+
+            $sepaAccounts = $getSepaAccounts->getAccounts();
             if (!$sepaAccounts || count($sepaAccounts) == 0) {
                 return array('success' => false, 'error' => 'No accounts found at bank');
             }
