@@ -229,17 +229,106 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
 
             echo "  ============================\n\n";
 
-            if ($challengeHhdUc && strlen($challengeHhdUc) > 100) {
-                echo "  PhotoTAN Image available (" . strlen($challengeHhdUc) . " bytes)\n";
-                // Close pre tag, show image, reopen pre tag
+            if ($challengeHhdUc && strlen($challengeHhdUc) > 0) {
+                echo "  PhotoTAN/HHD Data available (" . strlen($challengeHhdUc) . " bytes)\n";
+
+                // Check file type by magic bytes
+                $magic = substr($challengeHhdUc, 0, 16);
+                $magicHex = bin2hex($magic);
+                echo "  First 16 bytes (hex): " . $magicHex . "\n";
+                echo "  First 16 bytes (ASCII): " . preg_replace('/[^a-zA-Z0-9]/', '.', substr($challengeHhdUc, 0, 16)) . "\n";
+
+                // Save raw data to file for analysis
+                $tmpFile = '/tmp/phototan_challenge_' . time() . '.bin';
+                file_put_contents($tmpFile, $challengeHhdUc);
+                echo "  Saved raw data to: " . $tmpFile . "\n";
+
+                // Determine image type
+                $mimeType = null;
+                $isImage = false;
+                if (substr($magicHex, 0, 16) === '89504e470d0a1a0a') {
+                    echo "  Format: PNG ✓\n";
+                    $mimeType = 'image/png';
+                    $isImage = true;
+                } elseif (substr($magicHex, 0, 4) === 'ffd8') {
+                    echo "  Format: JPEG ✓\n";
+                    $mimeType = 'image/jpeg';
+                    $isImage = true;
+                } elseif (substr($magicHex, 0, 8) === '47494638') {
+                    echo "  Format: GIF ✓\n";
+                    $mimeType = 'image/gif';
+                    $isImage = true;
+                } elseif (substr($magicHex, 0, 4) === '424d') {
+                    echo "  Format: BMP ✓\n";
+                    $mimeType = 'image/bmp';
+                    $isImage = true;
+                } else {
+                    echo "  Format: NOT a standard image format\n";
+                    echo "  This appears to be HHD UC (Matrix) data for chipTAN/photoTAN\n";
+                }
+
+                // Also check with PHP's getimagesizefromstring
+                $imgInfo = @getimagesizefromstring($challengeHhdUc);
+                if ($imgInfo !== false) {
+                    echo "  PHP getimagesizefromstring: " . $imgInfo[0] . "x" . $imgInfo[1] . " type=" . $imgInfo[2] . " mime=" . $imgInfo['mime'] . "\n";
+                    $mimeType = $imgInfo['mime'];
+                    $isImage = true;
+                } else {
+                    echo "  PHP getimagesizefromstring: FAILED (not a valid image)\n";
+                }
+
+                // Close pre tag for HTML output
                 echo "</pre>\n";
-                echo '<div style="border:2px solid #000; padding:10px; margin:10px 0; background:#fff; display:inline-block;">';
-                echo '<p><strong>Scannen Sie dieses Bild mit Ihrer photoTAN-App:</strong></p>';
-                echo '<img src="data:image/png;base64,' . base64_encode($challengeHhdUc) . '" alt="PhotoTAN Challenge" style="max-width:400px; display:block;" />';
-                echo '</div>';
+
+                if ($isImage && $mimeType) {
+                    echo '<div style="border:2px solid #000; padding:10px; margin:10px 0; background:#fff; display:inline-block;">';
+                    echo '<p><strong>Scannen Sie dieses Bild mit Ihrer photoTAN-App:</strong></p>';
+                    echo '<img src="data:' . $mimeType . ';base64,' . base64_encode($challengeHhdUc) . '" alt="PhotoTAN Challenge" style="max-width:400px; display:block;" />';
+                    echo '</div>';
+                } else {
+                    // HHD UC data - this is a matrix code that needs special rendering
+                    // The php-fints library has a MatrixCode class for this
+                    echo '<div style="border:2px solid red; padding:10px; margin:10px 0; background:#fff;">';
+                    echo '<p><strong>⚠ Dies ist HHD-UC Matrixcode-Daten (kein Bild)</strong></p>';
+                    echo '<p>Die Daten müssen als Matrix-Code gerendert werden.</p>';
+
+                    // Try to render as matrix code using php-fints MatrixCode class
+                    if (class_exists('\Fhp\Syntax\Bin')) {
+                        try {
+                            // HHD UC data can be rendered as a simple black/white matrix
+                            // Each bit represents a module (black=1, white=0)
+                            $bytes = unpack('C*', $challengeHhdUc);
+                            $totalBits = count($bytes) * 8;
+                            $size = (int) sqrt($totalBits);
+                            echo '<p>Data size: ' . count($bytes) . ' bytes = ' . $totalBits . ' bits</p>';
+                            echo '<p>Possible matrix size: ' . $size . 'x' . $size . '</p>';
+
+                            // Create SVG matrix
+                            if ($size > 10 && $size < 100) {
+                                $scale = 5;
+                                echo '<svg width="' . ($size * $scale) . '" height="' . ($size * $scale) . '" style="border:1px solid #ccc;">';
+                                $bitIndex = 0;
+                                foreach ($bytes as $byte) {
+                                    for ($bit = 7; $bit >= 0; $bit--) {
+                                        $x = ($bitIndex % $size) * $scale;
+                                        $y = (int)($bitIndex / $size) * $scale;
+                                        $color = (($byte >> $bit) & 1) ? 'black' : 'white';
+                                        echo '<rect x="' . $x . '" y="' . $y . '" width="' . $scale . '" height="' . $scale . '" fill="' . $color . '"/>';
+                                        $bitIndex++;
+                                        if ($bitIndex >= $size * $size) break 2;
+                                    }
+                                }
+                                echo '</svg>';
+                            }
+                        } catch (\Exception $e) {
+                            echo '<p>Error rendering matrix: ' . $e->getMessage() . '</p>';
+                        }
+                    }
+
+                    echo '<p style="font-size:10px;">Raw hex (first 200 chars): ' . substr(bin2hex($challengeHhdUc), 0, 200) . '...</p>';
+                    echo '</div>';
+                }
                 echo "\n<pre>\n";
-            } elseif ($challengeHhdUc) {
-                echo "  HHD/UC data (raw hex, first 100 chars): " . substr(bin2hex($challengeHhdUc), 0, 100) . "...\n\n";
             }
 
             // Check if this is a decoupled (push) TAN
