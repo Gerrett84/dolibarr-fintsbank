@@ -83,14 +83,16 @@ if (class_exists('Fhp\FinTs') && count($accounts) > 0) {
         echo "    Customer ID: '" . ($acc->customer_id ?: $acc->username) . "'\n\n";
         flush();
 
-        $options = new \Fhp\Options\FinTsOptions();
-        $options->url = $acc->fints_url;
-        $options->bankCode = $acc->bank_code;
-        $options->productName = !empty($acc->product_name) ? $acc->product_name : 'Dolibarr FinTS';
-        $options->productVersion = '1.0.0';
-
-        $credentials = \Fhp\Options\Credentials::create($acc->username, 'TESTPIN123');
-        $fints = \Fhp\FinTs::new($options, $credentials);
+        // php-fints 2.1 API - direct constructor
+        $productName = !empty($acc->product_name) ? $acc->product_name : '9FA6681DDE0E03F8CAB8';
+        $fints = new \Fhp\FinTs(
+            $acc->fints_url,
+            $acc->bank_code,
+            $acc->username,
+            'TESTPIN123',
+            $productName,
+            '1.0.0'
+        );
         echo "✓ FinTs object created successfully (validation passed)\n";
         echo "  Note: This doesn't mean the PIN is correct, just that the format is valid.\n";
     } catch (\InvalidArgumentException $e) {
@@ -145,14 +147,16 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
     flush();
 
     try {
-        $options = new \Fhp\Options\FinTsOptions();
-        $options->url = $acc->fints_url;
-        $options->bankCode = $acc->bank_code;
-        $options->productName = !empty($acc->product_name) ? $acc->product_name : 'Dolibarr FinTS';
-        $options->productVersion = '1.0.0';
-
-        $credentials = \Fhp\Options\Credentials::create($acc->username, $testPin);
-        $fints = \Fhp\FinTs::new($options, $credentials);
+        // php-fints 2.1 API - direct constructor
+        $productName = !empty($acc->product_name) ? $acc->product_name : '9FA6681DDE0E03F8CAB8';
+        $fints = new \Fhp\FinTs(
+            $acc->fints_url,
+            $acc->bank_code,
+            $acc->username,
+            $testPin,
+            $productName,
+            '1.0.0'
+        );
         echo "✓ FinTs object created\n";
 
         echo "Attempting to get SEPA accounts...\n";

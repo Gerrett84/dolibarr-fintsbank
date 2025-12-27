@@ -178,8 +178,9 @@ class FintsAccount extends CommonObject
      */
     public function fetch($id)
     {
+        // Try with product_name first, fallback to without if column doesn't exist
         $sql = "SELECT rowid, fk_bank, bank_code, fints_url, fints_version, username, customer_id,";
-        $sql .= " iban, bic, account_number, last_sync, sync_from_date, active, product_name, date_creation";
+        $sql .= " iban, bic, account_number, last_sync, sync_from_date, active, date_creation";
         $sql .= " FROM ".MAIN_DB_PREFIX.$this->table_element;
         $sql .= " WHERE rowid = ".(int)$id;
 
@@ -200,7 +201,7 @@ class FintsAccount extends CommonObject
                 $this->last_sync = $this->db->jdate($obj->last_sync);
                 $this->sync_from_date = $this->db->jdate($obj->sync_from_date);
                 $this->active = $obj->active;
-                $this->product_name = $obj->product_name;
+                $this->product_name = isset($obj->product_name) ? $obj->product_name : '';
                 $this->date_creation = $this->db->jdate($obj->date_creation);
 
                 $this->db->free($resql);
