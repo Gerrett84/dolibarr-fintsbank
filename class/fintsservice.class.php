@@ -23,6 +23,8 @@ dol_include_once('/fintsbank/class/fintsaccount.class.php');
 dol_include_once('/fintsbank/class/fintstransaction.class.php');
 
 use Fhp\FinTs;
+use Fhp\Options\FinTsOptions;
+use Fhp\Options\Credentials;
 use Fhp\Model\SEPAAccount;
 use Fhp\Action\GetStatementOfAccount;
 use Fhp\BaseAction;
@@ -140,14 +142,20 @@ class FintsService
             // Log connection attempt (for debugging)
             error_log("FinTS: Connecting to " . $account->fints_url . " with bank code " . $account->bank_code);
 
+            // Create FinTS options
+            $options = new FinTsOptions();
+            $options->url = $account->fints_url;
+            $options->bankCode = $account->bank_code;
+            // Product registration - use configured or fallback
+            // Note: For production, you need a FinTS registration from Deutsche Kreditwirtschaft
+            $options->productName = !empty($account->product_name) ? $account->product_name : 'Dolibarr FinTS';
+            $options->productVersion = '1.0.0';
+
+            // Create credentials
+            $credentials = Credentials::create($account->username, $pin);
+
             // Create FinTS instance
-            $this->fints = FinTs::new(
-                $account->fints_url,
-                $account->bank_code,
-                $account->username,
-                $pin,
-                $account->customer_id ?: $account->username
-            );
+            $this->fints = FinTs::new($options, $credentials);
 
             return true;
         } catch (\InvalidArgumentException $e) {

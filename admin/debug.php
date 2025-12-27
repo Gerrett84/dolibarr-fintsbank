@@ -83,13 +83,14 @@ if (class_exists('Fhp\FinTs') && count($accounts) > 0) {
         echo "    Customer ID: '" . ($acc->customer_id ?: $acc->username) . "'\n\n";
         flush();
 
-        $fints = \Fhp\FinTs::new(
-            $acc->fints_url,
-            $acc->bank_code,
-            $acc->username,
-            'TESTPIN123', // Dummy PIN
-            $acc->customer_id ?: $acc->username // Customer ID
-        );
+        $options = new \Fhp\Options\FinTsOptions();
+        $options->url = $acc->fints_url;
+        $options->bankCode = $acc->bank_code;
+        $options->productName = !empty($acc->product_name) ? $acc->product_name : 'Dolibarr FinTS';
+        $options->productVersion = '1.0.0';
+
+        $credentials = \Fhp\Options\Credentials::create($acc->username, 'TESTPIN123');
+        $fints = \Fhp\FinTs::new($options, $credentials);
         echo "✓ FinTs object created successfully (validation passed)\n";
         echo "  Note: This doesn't mean the PIN is correct, just that the format is valid.\n";
     } catch (\InvalidArgumentException $e) {
@@ -144,13 +145,14 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
     flush();
 
     try {
-        $fints = \Fhp\FinTs::new(
-            $acc->fints_url,
-            $acc->bank_code,
-            $acc->username,
-            $testPin,
-            $acc->customer_id ?: $acc->username
-        );
+        $options = new \Fhp\Options\FinTsOptions();
+        $options->url = $acc->fints_url;
+        $options->bankCode = $acc->bank_code;
+        $options->productName = !empty($acc->product_name) ? $acc->product_name : 'Dolibarr FinTS';
+        $options->productVersion = '1.0.0';
+
+        $credentials = \Fhp\Options\Credentials::create($acc->username, $testPin);
+        $fints = \Fhp\FinTs::new($options, $credentials);
         echo "✓ FinTs object created\n";
 
         echo "Attempting to get SEPA accounts...\n";
@@ -164,6 +166,7 @@ if (isset($_GET['pin']) && !empty($_GET['pin']) && count($accounts) > 0) {
         echo "✗ Error: " . get_class($t) . "\n";
         echo "  Message: " . $t->getMessage() . "\n";
         echo "  File: " . $t->getFile() . ":" . $t->getLine() . "\n";
+        echo "  Trace:\n" . $t->getTraceAsString() . "\n";
     }
 } else {
     echo "To test with real PIN, add ?pin=YOUR_PIN to the URL\n";

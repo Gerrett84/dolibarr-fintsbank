@@ -96,6 +96,11 @@ class FintsAccount extends CommonObject
     public $active = 1;
 
     /**
+     * @var string FinTS product name/registration number
+     */
+    public $product_name;
+
+    /**
      * @var string Encryption key for credentials
      */
     private $encryptionKey;
@@ -137,7 +142,7 @@ class FintsAccount extends CommonObject
 
         $sql = "INSERT INTO ".MAIN_DB_PREFIX.$this->table_element;
         $sql .= " (fk_bank, bank_code, fints_url, fints_version, username, customer_id,";
-        $sql .= " iban, bic, account_number, sync_from_date, active, date_creation, entity)";
+        $sql .= " iban, bic, account_number, sync_from_date, active, product_name, date_creation, entity)";
         $sql .= " VALUES (";
         $sql .= " ".(int)$this->fk_bank.",";
         $sql .= " '".$this->db->escape($this->bank_code)."',";
@@ -150,6 +155,7 @@ class FintsAccount extends CommonObject
         $sql .= " ".($this->account_number ? "'".$this->db->escape($this->account_number)."'" : "NULL").",";
         $sql .= " ".($this->sync_from_date ? "'".$this->db->idate($this->sync_from_date)."'" : "NULL").",";
         $sql .= " ".(int)$this->active.",";
+        $sql .= " ".($this->product_name ? "'".$this->db->escape($this->product_name)."'" : "NULL").",";
         $sql .= " '".$this->db->idate(dol_now())."',";
         $sql .= " ".(int)$conf->entity;
         $sql .= ")";
@@ -173,7 +179,7 @@ class FintsAccount extends CommonObject
     public function fetch($id)
     {
         $sql = "SELECT rowid, fk_bank, bank_code, fints_url, fints_version, username, customer_id,";
-        $sql .= " iban, bic, account_number, last_sync, sync_from_date, active, date_creation";
+        $sql .= " iban, bic, account_number, last_sync, sync_from_date, active, product_name, date_creation";
         $sql .= " FROM ".MAIN_DB_PREFIX.$this->table_element;
         $sql .= " WHERE rowid = ".(int)$id;
 
@@ -194,6 +200,7 @@ class FintsAccount extends CommonObject
                 $this->last_sync = $this->db->jdate($obj->last_sync);
                 $this->sync_from_date = $this->db->jdate($obj->sync_from_date);
                 $this->active = $obj->active;
+                $this->product_name = $obj->product_name;
                 $this->date_creation = $this->db->jdate($obj->date_creation);
 
                 $this->db->free($resql);
@@ -248,6 +255,7 @@ class FintsAccount extends CommonObject
         $sql .= " account_number = ".($this->account_number ? "'".$this->db->escape($this->account_number)."'" : "NULL").",";
         $sql .= " sync_from_date = ".($this->sync_from_date ? "'".$this->db->idate($this->sync_from_date)."'" : "NULL").",";
         $sql .= " active = ".(int)$this->active.",";
+        $sql .= " product_name = ".($this->product_name ? "'".$this->db->escape($this->product_name)."'" : "NULL").",";
         $sql .= " date_modification = '".$this->db->idate(dol_now())."'";
         $sql .= " WHERE rowid = ".(int)$this->id;
 

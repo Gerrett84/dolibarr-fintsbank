@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS llx_fintsbank_account (
     last_sync       DATETIME,                      -- Last successful sync
     sync_from_date  DATE,                          -- Sync transactions from this date
     active          TINYINT DEFAULT 1,             -- Is connection active?
+    product_name    VARCHAR(100),                  -- FinTS product name/registration number
     date_creation   DATETIME NOT NULL,
     date_modification DATETIME,
     entity          INTEGER DEFAULT 1 NOT NULL
