@@ -270,9 +270,12 @@ class FintsService
                     'tanMediumName' => $tanRequest->getTanMediumName(),
                 );
 
+                // Extract and encode challenge image
                 $challengeHhdUc = $tanRequest->getChallengeHhdUc();
-                if ($challengeHhdUc) {
-                    $result['challengeImage'] = base64_encode($challengeHhdUc);
+                $imageInfo = $this->extractChallengeImage($challengeHhdUc);
+                if ($imageInfo) {
+                    $result['challengeImage'] = base64_encode($imageInfo['imageData']);
+                    $result['challengeMimeType'] = $imageInfo['mimeType'];
                     $result['challengeType'] = 'phototan';
                 }
 
@@ -328,10 +331,12 @@ class FintsService
                     'tanMediumName' => $tanRequest->getTanMediumName(),
                 );
 
-                // Check for photoTAN/chipTAN image
+                // Extract and encode challenge image
                 $challengeHhdUc = $tanRequest->getChallengeHhdUc();
-                if ($challengeHhdUc) {
-                    $result['challengeImage'] = base64_encode($challengeHhdUc);
+                $imageInfo = $this->extractChallengeImage($challengeHhdUc);
+                if ($imageInfo) {
+                    $result['challengeImage'] = base64_encode($imageInfo['imageData']);
+                    $result['challengeMimeType'] = $imageInfo['mimeType'];
                     $result['challengeType'] = 'phototan';
                 }
 
@@ -520,5 +525,107 @@ class FintsService
     public function setAccount($account)
     {
         $this->account = $account;
+    }
+
+    /**
+     * Extract image data from FinTS challenge
+     *
+     * The challenge data format is:
+     * - 2 bytes: MIME type length (big-endian)
+     * - N bytes: MIME type string
+     * - 2 bytes: Image data length (big-endian)
+     * - M bytes: Image data
+     *
+     * @param mixed $challengeHhdUc Raw challenge data (may be Bin object)
+     * @return array|null Array with 'mimeType' and 'imageData', or null on failure
+     */
+    private function extractChallengeImage($challengeHhdUc)
+    {
+        if (!$challengeHhdUc) {
+            return null;
+        }
+
+        // Convert Bin object to string if needed
+        if ($challengeHhdUc instanceof \Fhp\Syntax\Bin) {
+            $rawData = $challengeHhdUc->getData();
+        } else {
+            $rawData = $challengeHhdUc;
+        }
+
+        if (empty($rawData)) {
+            return null;
+        }
+
+        $mimeType = null;
+        $imageData = null;
+
+        // Try to parse structured format
+        try {
+            $dataLen = strlen($rawData);
+
+            if ($dataLen >= 2) {
+                // Read MIME type length (2 bytes, big-endian)
+                $mimeTypeLen = ord($rawData[0]) * 256 + ord($rawData[1]);
+
+                if ($mimeTypeLen > 0 && $mimeTypeLen < 50 && $dataLen >= 2 + $mimeTypeLen) {
+                    $mimeType = substr($rawData, 2, $mimeTypeLen);
+
+                    // Check if MIME type looks valid
+                    if (strpos($mimeType, 'image/') === 0) {
+                        $offset = 2 + $mimeTypeLen;
+
+                        // Read image data length (2 bytes, big-endian)
+                        if ($dataLen >= $offset + 2) {
+                            $imageLen = ord($rawData[$offset]) * 256 + ord($rawData[$offset + 1]);
+                            $offset += 2;
+                            $remainingBytes = $dataLen - $offset;
+
+                            if ($remainingBytes >= $imageLen && $imageLen > 0) {
+                                $imageData = substr($rawData, $offset, $imageLen);
+                            } else {
+                                // Use all remaining data as image
+                                $imageData = substr($rawData, $offset);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            error_log("FinTS: Challenge parse error: " . $e->getMessage());
+        }
+
+        // If structured parsing failed, try direct image detection
+        if (!$imageData) {
+            // Check raw magic bytes
+            $magic = substr($rawData, 0, 8);
+
+            // PNG magic: 89 50 4E 47 0D 0A 1A 0A
+            if (substr($magic, 0, 8) === "\x89PNG\r\n\x1a\n") {
+                $mimeType = 'image/png';
+                $imageData = $rawData;
+            }
+            // JPEG magic: FF D8
+            elseif (substr($magic, 0, 2) === "\xff\xd8") {
+                $mimeType = 'image/jpeg';
+                $imageData = $rawData;
+            }
+            // Try getimagesizefromstring as fallback
+            else {
+                $imgInfo = @getimagesizefromstring($rawData);
+                if ($imgInfo !== false) {
+                    $mimeType = $imgInfo['mime'];
+                    $imageData = $rawData;
+                }
+            }
+        }
+
+        if ($imageData && $mimeType) {
+            return array(
+                'mimeType' => $mimeType,
+                'imageData' => $imageData
+            );
+        }
+
+        return null;
     }
 }

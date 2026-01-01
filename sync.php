@@ -257,7 +257,8 @@ if ($id > 0) {
                 if (data.needsTan) {
                     // Show TAN step
                     if (data.challengeImage) {
-                        document.getElementById("phototan-img").src = "data:image/png;base64," + data.challengeImage;
+                        var mimeType = data.challengeMimeType || "image/png";
+                        document.getElementById("phototan-img").src = "data:" + mimeType + ";base64," + data.challengeImage;
                         document.getElementById("phototan-image").style.display = "block";
                     }
                     if (data.tanMediumName) {
