@@ -69,7 +69,11 @@ ViewBankLine=View bank entry
 ViewInvoice=View invoice
 Unmatch=Remove match
 
+PaymentCreated=Payment successfully created
+ImportedFromFinTS=Imported from FinTS
+
 # Errors
+ErrorInvoiceNotFound=Invoice not found
 ErrorBankConnection=Bank connection error
 ErrorInvalidTAN=Invalid TAN
 ErrorTANTimeout=TAN input timeout

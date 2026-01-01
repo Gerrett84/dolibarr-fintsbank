@@ -30,6 +30,10 @@ if (!$res) {
 
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/bank/class/account.class.php';
+require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+require_once DOL_DOCUMENT_ROOT.'/compta/paiement/class/paiement.class.php';
+require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
+require_once DOL_DOCUMENT_ROOT.'/fourn/class/paiementfourn.class.php';
 dol_include_once('/fintsbank/class/fintsaccount.class.php');
 dol_include_once('/fintsbank/class/fintstransaction.class.php');
 
@@ -130,26 +134,157 @@ if ($action == 'import' && GETPOST('trans_id', 'int')) {
     }
 }
 
-// Auto-match single transaction
+// Auto-match single transaction - redirects to match action with found invoice
 if ($action == 'automatch' && GETPOST('trans_id', 'int')) {
     $trans = new FintsTransaction($db);
     if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
         $invoiceId = $trans->autoMatch();
         if ($invoiceId > 0) {
-            $trans->linkToInvoice($invoiceId);
-            setEventMessages($langs->trans("TransactionMatched"), null, 'mesgs');
+            // Redirect to match action to create real payment
+            header('Location: '.$_SERVER["PHP_SELF"].'?action=match&trans_id='.$trans->id.'&invoice_id='.$invoiceId.'&id='.$id.'&status='.$status.'&token='.newToken());
+            exit;
         } else {
             setEventMessages($langs->trans("NoMatchFound"), null, 'warnings');
         }
     }
 }
 
-// Manual match with invoice
+// Manual match with invoice - creates real payment
 if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'int')) {
     $trans = new FintsTransaction($db);
     if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
-        $trans->linkToInvoice(GETPOST('invoice_id', 'int'));
-        setEventMessages($langs->trans("TransactionMatched"), null, 'mesgs');
+        $invoiceId = GETPOST('invoice_id', 'int');
+        $error = 0;
+
+        $db->begin();
+
+        // Determine if customer or supplier invoice based on amount
+        if ($trans->amount > 0) {
+            // Customer invoice payment (incoming money)
+            $facture = new Facture($db);
+            if ($facture->fetch($invoiceId) > 0) {
+                // Create payment
+                $paiement = new Paiement($db);
+                $paiement->datepaye = $trans->booking_date;
+                $paiement->amounts = array($invoiceId => $trans->amount);
+                $paiement->multicurrency_amounts = array($invoiceId => $trans->amount);
+                $paiement->multicurrency_code = array($invoiceId => $trans->currency);
+                $paiement->multicurrency_tx = array($invoiceId => 1);
+                $paiement->paiementid = dol_getIdFromCode($db, 'VIR', 'c_paiement', 'code', 'id', 1); // Bank transfer
+                $paiement->num_payment = $trans->end_to_end_id ?: $trans->transaction_id;
+                $paiement->note_private = $langs->trans("ImportedFromFinTS").' - '.$trans->description;
+
+                $paiement_id = $paiement->create($user, 1, $facture->thirdparty);
+                if ($paiement_id > 0) {
+                    // Link to existing bank line if transaction was imported
+                    if ($trans->fk_bank_line > 0) {
+                        // Update payment with bank line reference
+                        $sql = "UPDATE ".MAIN_DB_PREFIX."paiement SET fk_bank = ".(int)$trans->fk_bank_line;
+                        $sql .= " WHERE rowid = ".(int)$paiement_id;
+                        $db->query($sql);
+
+                        // Create bank_url entries to link payment and company to bank line
+                        $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type)";
+                        $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$paiement_id;
+                        $sql .= ", '/compta/paiement/card.php?id=".$paiement_id."'";
+                        $sql .= ", '(Payment)', 'payment')";
+                        $db->query($sql);
+
+                        if ($facture->fk_soc > 0) {
+                            $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type)";
+                            $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$facture->fk_soc;
+                            $sql .= ", '/societe/card.php?socid=".$facture->fk_soc."'";
+                            $sql .= ", '".$db->escape($facture->thirdparty->name)."', 'company')";
+                            $db->query($sql);
+                        }
+                    } else {
+                        // Transaction not yet imported - create bank line via addPaymentToBank
+                        $fintsAccount = new FintsAccount($db);
+                        if ($fintsAccount->fetch($trans->fk_fintsbank_account) > 0 && $fintsAccount->fk_bank > 0) {
+                            $bank_line_id = $paiement->addPaymentToBank($user, 'payment', '(CustomerInvoicePayment)', $fintsAccount->fk_bank, $trans->name, '');
+                            if ($bank_line_id > 0) {
+                                // Update transaction with bank line
+                                $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction SET fk_bank_line = ".(int)$bank_line_id;
+                                $sql .= ", status = 'imported' WHERE rowid = ".(int)$trans->id;
+                                $db->query($sql);
+                            }
+                        }
+                    }
+                    // Link transaction to invoice
+                    $trans->linkToInvoice($invoiceId);
+                    setEventMessages($langs->trans("PaymentCreated"), null, 'mesgs');
+                } else {
+                    $error++;
+                    setEventMessages($paiement->error, $paiement->errors, 'errors');
+                }
+            } else {
+                $error++;
+                setEventMessages($langs->trans("ErrorInvoiceNotFound"), null, 'errors');
+            }
+        } else {
+            // Supplier invoice payment (outgoing money)
+            $facture = new FactureFournisseur($db);
+            if ($facture->fetch($invoiceId) > 0) {
+                // Create supplier payment
+                $paiement = new PaiementFourn($db);
+                $paiement->datepaye = $trans->booking_date;
+                $paiement->amounts = array($invoiceId => abs($trans->amount));
+                $paiement->multicurrency_amounts = array($invoiceId => abs($trans->amount));
+                $paiement->multicurrency_code = array($invoiceId => $trans->currency);
+                $paiement->multicurrency_tx = array($invoiceId => 1);
+                $paiement->paiementid = dol_getIdFromCode($db, 'VIR', 'c_paiement', 'code', 'id', 1);
+                $paiement->num_payment = $trans->end_to_end_id ?: $trans->transaction_id;
+                $paiement->note_private = $langs->trans("ImportedFromFinTS").' - '.$trans->description;
+
+                $paiement_id = $paiement->create($user, 1, $facture->thirdparty);
+                if ($paiement_id > 0) {
+                    // Link to existing bank line if transaction was imported
+                    if ($trans->fk_bank_line > 0) {
+                        $sql = "UPDATE ".MAIN_DB_PREFIX."paiementfourn SET fk_bank = ".(int)$trans->fk_bank_line;
+                        $sql .= " WHERE rowid = ".(int)$paiement_id;
+                        $db->query($sql);
+
+                        $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type)";
+                        $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$paiement_id;
+                        $sql .= ", '/fourn/paiement/card.php?id=".$paiement_id."'";
+                        $sql .= ", '(SupplierPayment)', 'payment_supplier')";
+                        $db->query($sql);
+
+                        if ($facture->fk_soc > 0) {
+                            $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type)";
+                            $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$facture->fk_soc;
+                            $sql .= ", '/societe/card.php?socid=".$facture->fk_soc."'";
+                            $sql .= ", '".$db->escape($facture->thirdparty->name)."', 'company')";
+                            $db->query($sql);
+                        }
+                    } else {
+                        $fintsAccount = new FintsAccount($db);
+                        if ($fintsAccount->fetch($trans->fk_fintsbank_account) > 0 && $fintsAccount->fk_bank > 0) {
+                            $bank_line_id = $paiement->addPaymentToBank($user, 'payment_supplier', '(SupplierInvoicePayment)', $fintsAccount->fk_bank, $trans->name, '');
+                            if ($bank_line_id > 0) {
+                                $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction SET fk_bank_line = ".(int)$bank_line_id;
+                                $sql .= ", status = 'imported' WHERE rowid = ".(int)$trans->id;
+                                $db->query($sql);
+                            }
+                        }
+                    }
+                    $trans->linkToInvoice($invoiceId);
+                    setEventMessages($langs->trans("PaymentCreated"), null, 'mesgs');
+                } else {
+                    $error++;
+                    setEventMessages($paiement->error, $paiement->errors, 'errors');
+                }
+            } else {
+                $error++;
+                setEventMessages($langs->trans("ErrorInvoiceNotFound"), null, 'errors');
+            }
+        }
+
+        if ($error) {
+            $db->rollback();
+        } else {
+            $db->commit();
+        }
     }
 }
 

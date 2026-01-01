@@ -69,7 +69,11 @@ ViewBankLine=Bankbuchung anzeigen
 ViewInvoice=Rechnung anzeigen
 Unmatch=Zuordnung aufheben
 
+PaymentCreated=Zahlung erfolgreich erstellt
+ImportedFromFinTS=Importiert von FinTS
+
 # Errors
+ErrorInvoiceNotFound=Rechnung nicht gefunden
 ErrorBankConnection=Fehler bei der Bankverbindung
 ErrorInvalidTAN=Ungueltige TAN
 ErrorTANTimeout=TAN-Eingabe abgelaufen
