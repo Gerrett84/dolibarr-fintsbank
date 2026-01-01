@@ -214,13 +214,18 @@ class FintsTransaction extends CommonObject
     {
         $sql = "UPDATE ".MAIN_DB_PREFIX.$this->table_element;
         $sql .= " SET fk_facture = ".(int)$fk_facture;
-        $sql .= ", status = 'matched'";
+        // Only change status to matched if not already imported
+        if ($this->status != self::STATUS_IMPORTED) {
+            $sql .= ", status = 'matched'";
+        }
         $sql .= ", date_match = '".$this->db->idate(dol_now())."'";
         $sql .= " WHERE rowid = ".(int)$this->id;
 
         if ($this->db->query($sql)) {
             $this->fk_facture = $fk_facture;
-            $this->status = 'matched';
+            if ($this->status != self::STATUS_IMPORTED) {
+                $this->status = 'matched';
+            }
             return 1;
         }
         return -1;
