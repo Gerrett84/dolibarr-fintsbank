@@ -530,16 +530,16 @@ class FintsService
     /**
      * Process statements and import transactions
      *
-     * @param array $statements Statement data
+     * @param array $statementOfAccounts Array of StatementOfAccount objects
      * @return array Status array
      */
-    private function processStatements($statements)
+    private function processStatements($statementOfAccounts)
     {
         $imported = 0;
         $skipped = 0;
 
         try {
-            if (!$statements || count($statements) == 0) {
+            if (!$statementOfAccounts || count($statementOfAccounts) == 0) {
                 return array(
                     'success' => true,
                     'needsTan' => false,
@@ -549,39 +549,44 @@ class FintsService
                 );
             }
 
-            foreach ($statements as $statement) {
-                foreach ($statement->getTransactions() as $transaction) {
-                    $fintsTransaction = new FintsTransaction($this->db);
-                    $fintsTransaction->fk_fintsbank_account = $this->account->id;
+            // StatementOfAccount contains Statements (daily), each Statement contains Transactions
+            foreach ($statementOfAccounts as $statementOfAccount) {
+                // Get daily statements from the StatementOfAccount
+                foreach ($statementOfAccount->getStatements() as $statement) {
+                    // Get transactions from each daily statement
+                    foreach ($statement->getTransactions() as $transaction) {
+                        $fintsTransaction = new FintsTransaction($this->db);
+                        $fintsTransaction->fk_fintsbank_account = $this->account->id;
 
-                    // Generate unique ID
-                    $fintsTransaction->transaction_id = md5(
-                        $transaction->getBookingDate()->format('Y-m-d') .
-                        $transaction->getAmount() .
-                        $transaction->getDescription1() .
-                        $transaction->getAccountNumber()
-                    );
+                        // Generate unique ID
+                        $fintsTransaction->transaction_id = md5(
+                            $transaction->getBookingDate()->format('Y-m-d') .
+                            $transaction->getAmount() .
+                            $transaction->getDescription1() .
+                            $transaction->getAccountNumber()
+                        );
 
-                    // Check if exists
-                    if ($fintsTransaction->fetchByTransactionId($fintsTransaction->transaction_id, $this->account->id)) {
-                        $skipped++;
-                        continue;
-                    }
+                        // Check if exists
+                        if ($fintsTransaction->fetchByTransactionId($fintsTransaction->transaction_id, $this->account->id)) {
+                            $skipped++;
+                            continue;
+                        }
 
-                    // Fill data
-                    $fintsTransaction->booking_date = $transaction->getBookingDate()->getTimestamp();
-                    $fintsTransaction->value_date = $transaction->getValutaDate() ? $transaction->getValutaDate()->getTimestamp() : null;
-                    $fintsTransaction->amount = $transaction->getAmount();
-                    $fintsTransaction->currency = 'EUR';
-                    $fintsTransaction->name = $transaction->getName();
-                    $fintsTransaction->iban = $transaction->getAccountNumber();
-                    $fintsTransaction->bic = $transaction->getBankCode();
-                    $fintsTransaction->description = $transaction->getDescription1() . ' ' . $transaction->getDescription2();
-                    $fintsTransaction->booking_text = $transaction->getBookingText();
-                    $fintsTransaction->end_to_end_id = $transaction->getEndToEndID();
+                        // Fill data
+                        $fintsTransaction->booking_date = $transaction->getBookingDate()->getTimestamp();
+                        $fintsTransaction->value_date = $transaction->getValutaDate() ? $transaction->getValutaDate()->getTimestamp() : null;
+                        $fintsTransaction->amount = $transaction->getAmount();
+                        $fintsTransaction->currency = 'EUR';
+                        $fintsTransaction->name = $transaction->getName();
+                        $fintsTransaction->iban = $transaction->getAccountNumber();
+                        $fintsTransaction->bic = $transaction->getBankCode();
+                        $fintsTransaction->description = $transaction->getDescription1() . ' ' . $transaction->getDescription2();
+                        $fintsTransaction->booking_text = $transaction->getBookingText();
+                        $fintsTransaction->end_to_end_id = $transaction->getEndToEndID();
 
-                    if ($fintsTransaction->create() > 0) {
-                        $imported++;
+                        if ($fintsTransaction->create() > 0) {
+                            $imported++;
+                        }
                     }
                 }
             }
