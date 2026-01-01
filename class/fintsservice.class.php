@@ -217,6 +217,44 @@ class FintsService
             $_SESSION[self::SESSION_KEY . '_from_date'] = $fromDate->format('Y-m-d');
             $_SESSION[self::SESSION_KEY . '_to_date'] = $toDate ? $toDate->format('Y-m-d') : null;
 
+            // Select TAN mode first (required for php-fints 3.x)
+            $tanModes = $this->fints->getTanModes();
+            if (empty($tanModes)) {
+                return array('success' => false, 'error' => 'No TAN modes available from bank');
+            }
+
+            // Use stored TAN mode or select first available
+            $selectedTanMode = null;
+            $storedTanModeId = isset($_SESSION[self::SESSION_KEY . '_tan_mode']) ? $_SESSION[self::SESSION_KEY . '_tan_mode'] : null;
+
+            if ($storedTanModeId) {
+                foreach ($tanModes as $mode) {
+                    if ($mode->getId() == $storedTanModeId) {
+                        $selectedTanMode = $mode;
+                        break;
+                    }
+                }
+            }
+
+            // If no stored mode or not found, use first available (or prefer photoTAN/pushTAN)
+            if (!$selectedTanMode) {
+                foreach ($tanModes as $mode) {
+                    $modeName = strtolower($mode->getName());
+                    if (strpos($modeName, 'photo') !== false || strpos($modeName, 'push') !== false || strpos($modeName, 'app') !== false) {
+                        $selectedTanMode = $mode;
+                        break;
+                    }
+                }
+                if (!$selectedTanMode) {
+                    $selectedTanMode = $tanModes[0];
+                }
+            }
+
+            $this->fints->selectTanMode($selectedTanMode);
+            $_SESSION[self::SESSION_KEY . '_tan_mode'] = $selectedTanMode->getId();
+
+            error_log("FinTS: Selected TAN mode: " . $selectedTanMode->getName());
+
             // Login first
             $login = $this->fints->login();
             if ($login->needsTan()) {
@@ -339,6 +377,18 @@ class FintsService
                 return array('success' => false, 'error' => $this->error);
             }
 
+            // Restore TAN mode from session
+            $storedTanModeId = isset($_SESSION[self::SESSION_KEY . '_tan_mode']) ? $_SESSION[self::SESSION_KEY . '_tan_mode'] : null;
+            if ($storedTanModeId) {
+                $tanModes = $this->fints->getTanModes();
+                foreach ($tanModes as $mode) {
+                    if ($mode->getId() == $storedTanModeId) {
+                        $this->fints->selectTanMode($mode);
+                        break;
+                    }
+                }
+            }
+
             // Restore action
             $getStatement = unserialize($serializedAction);
 
@@ -459,6 +509,7 @@ class FintsService
         unset($_SESSION[self::SESSION_KEY . '_from_date']);
         unset($_SESSION[self::SESSION_KEY . '_to_date']);
         unset($_SESSION[self::SESSION_KEY . '_target_iban']);
+        unset($_SESSION[self::SESSION_KEY . '_tan_mode']);
     }
 
     /**
