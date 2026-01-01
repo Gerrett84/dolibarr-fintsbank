@@ -13,6 +13,30 @@
  * \brief      AJAX handler for bank sync
  */
 
+// Error handler to catch fatal errors and return JSON
+function fintsSyncErrorHandler($errno, $errstr, $errfile, $errline) {
+    header('Content-Type: application/json');
+    echo json_encode(array(
+        'success' => false,
+        'error' => "PHP Error: $errstr in $errfile:$errline"
+    ));
+    exit;
+}
+
+function fintsSyncShutdownHandler() {
+    $error = error_get_last();
+    if ($error && in_array($error['type'], array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR))) {
+        header('Content-Type: application/json');
+        echo json_encode(array(
+            'success' => false,
+            'error' => "Fatal Error: {$error['message']} in {$error['file']}:{$error['line']}"
+        ));
+    }
+}
+
+set_error_handler('fintsSyncErrorHandler', E_ERROR | E_PARSE);
+register_shutdown_function('fintsSyncShutdownHandler');
+
 // Dolibarr AJAX configuration - must be before main.inc.php
 if (!defined('NOTOKENRENEWAL')) {
     define('NOTOKENRENEWAL', '1'); // Disable token renewal for AJAX
