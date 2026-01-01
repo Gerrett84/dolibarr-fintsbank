@@ -260,6 +260,8 @@ class FintsService
             if ($login->needsTan()) {
                 // TAN required for login - return challenge
                 $_SESSION[self::SESSION_KEY . '_persisted'] = $this->fints->persist();
+                $_SESSION[self::SESSION_KEY . '_action'] = serialize($login);
+                $_SESSION[self::SESSION_KEY . '_step'] = 'login';
 
                 $tanRequest = $login->getTanRequest();
                 $result = array(
@@ -322,6 +324,7 @@ class FintsService
                 // TAN required - persist state and return challenge
                 $_SESSION[self::SESSION_KEY . '_persisted'] = $this->fints->persist();
                 $_SESSION[self::SESSION_KEY . '_action'] = serialize($getStatement);
+                $_SESSION[self::SESSION_KEY . '_step'] = 'statement';
 
                 $tanRequest = $getStatement->getTanRequest();
                 $result = array(
@@ -366,6 +369,7 @@ class FintsService
             $accountId = isset($_SESSION[self::SESSION_KEY . '_account_id']) ? $_SESSION[self::SESSION_KEY . '_account_id'] : null;
             $persistedInstance = isset($_SESSION[self::SESSION_KEY . '_persisted']) ? $_SESSION[self::SESSION_KEY . '_persisted'] : null;
             $serializedAction = isset($_SESSION[self::SESSION_KEY . '_action']) ? $_SESSION[self::SESSION_KEY . '_action'] : null;
+            $step = isset($_SESSION[self::SESSION_KEY . '_step']) ? $_SESSION[self::SESSION_KEY . '_step'] : null;
 
             if (!$pin || !$accountId || !$persistedInstance || !$serializedAction) {
                 return array('success' => false, 'error' => 'Session expired. Please start again.');
@@ -395,29 +399,125 @@ class FintsService
             }
 
             // Restore action
-            $getStatement = unserialize($serializedAction);
+            $action = unserialize($serializedAction);
 
             // Submit TAN
-            $this->fints->submitTan($getStatement, $tan);
+            $this->fints->submitTan($action, $tan);
 
-            if ($getStatement->needsTan()) {
+            if ($action->needsTan()) {
                 // Another TAN required
                 $_SESSION[self::SESSION_KEY . '_persisted'] = $this->fints->persist();
-                $_SESSION[self::SESSION_KEY . '_action'] = serialize($getStatement);
+                $_SESSION[self::SESSION_KEY . '_action'] = serialize($action);
 
-                $tanRequest = $getStatement->getTanRequest();
-                return array(
+                $tanRequest = $action->getTanRequest();
+                $result = array(
                     'success' => true,
                     'needsTan' => true,
                     'challenge' => $tanRequest->getChallenge(),
-                    'error' => 'Additional TAN required'
+                    'tanMediumName' => $tanRequest->getTanMediumName(),
                 );
+
+                // Extract and encode challenge image
+                $challengeHhdUc = $tanRequest->getChallengeHhdUc();
+                $imageInfo = $this->extractChallengeImage($challengeHhdUc);
+                if ($imageInfo) {
+                    $result['challengeImage'] = base64_encode($imageInfo['imageData']);
+                    $result['challengeMimeType'] = $imageInfo['mimeType'];
+                    $result['challengeType'] = 'phototan';
+                }
+
+                return $result;
             }
 
-            // Clear session
-            $this->clearState();
+            // TAN accepted - continue based on step
+            if ($step === 'login') {
+                // Login complete, now continue with getting accounts and statements
+                return $this->continueAfterLogin();
+            }
 
-            // Process statements
+            // Statement step - process the results
+            $this->clearState();
+            $statements = $action->getStatements();
+            return $this->processStatements($statements);
+
+        } catch (\Exception $e) {
+            $this->clearState();
+            return array('success' => false, 'error' => $e->getMessage());
+        }
+    }
+
+    /**
+     * Continue sync after login TAN is submitted
+     *
+     * @return array Status array
+     */
+    private function continueAfterLogin()
+    {
+        try {
+            // Get SEPA accounts
+            $getSepaAccounts = \Fhp\Action\GetSEPAAccounts::create();
+            $this->fints->execute($getSepaAccounts);
+
+            if ($getSepaAccounts->needsTan()) {
+                return array('success' => false, 'error' => 'TAN required for account list - not supported yet');
+            }
+
+            $sepaAccounts = $getSepaAccounts->getAccounts();
+            if (!$sepaAccounts || count($sepaAccounts) == 0) {
+                return array('success' => false, 'error' => 'No accounts found at bank');
+            }
+
+            // Find matching account
+            $targetAccount = null;
+            foreach ($sepaAccounts as $sepaAccount) {
+                if ($this->account->iban && $sepaAccount->getIban() === $this->account->iban) {
+                    $targetAccount = $sepaAccount;
+                    break;
+                }
+            }
+            if (!$targetAccount) {
+                $targetAccount = $sepaAccounts[0];
+            }
+
+            // Get date range from session
+            $fromDateStr = isset($_SESSION[self::SESSION_KEY . '_from_date']) ? $_SESSION[self::SESSION_KEY . '_from_date'] : '-30 days';
+            $toDateStr = isset($_SESSION[self::SESSION_KEY . '_to_date']) ? $_SESSION[self::SESSION_KEY . '_to_date'] : null;
+
+            $fromDate = new \DateTime($fromDateStr);
+            $toDate = $toDateStr ? new \DateTime($toDateStr) : new \DateTime();
+
+            // Get statements
+            $getStatement = \Fhp\Action\GetStatementOfAccount::create($targetAccount, $fromDate, $toDate);
+            $this->fints->execute($getStatement);
+
+            if ($getStatement->needsTan()) {
+                // TAN required - persist state and return challenge
+                $_SESSION[self::SESSION_KEY . '_persisted'] = $this->fints->persist();
+                $_SESSION[self::SESSION_KEY . '_action'] = serialize($getStatement);
+                $_SESSION[self::SESSION_KEY . '_step'] = 'statement';
+
+                $tanRequest = $getStatement->getTanRequest();
+                $result = array(
+                    'success' => true,
+                    'needsTan' => true,
+                    'challenge' => $tanRequest->getChallenge(),
+                    'tanMediumName' => $tanRequest->getTanMediumName(),
+                );
+
+                // Extract and encode challenge image
+                $challengeHhdUc = $tanRequest->getChallengeHhdUc();
+                $imageInfo = $this->extractChallengeImage($challengeHhdUc);
+                if ($imageInfo) {
+                    $result['challengeImage'] = base64_encode($imageInfo['imageData']);
+                    $result['challengeMimeType'] = $imageInfo['mimeType'];
+                    $result['challengeType'] = 'phototan';
+                }
+
+                return $result;
+            }
+
+            // No TAN needed - process statements
+            $this->clearState();
             $statements = $getStatement->getStatements();
             return $this->processStatements($statements);
 
@@ -515,6 +615,7 @@ class FintsService
         unset($_SESSION[self::SESSION_KEY . '_to_date']);
         unset($_SESSION[self::SESSION_KEY . '_target_iban']);
         unset($_SESSION[self::SESSION_KEY . '_tan_mode']);
+        unset($_SESSION[self::SESSION_KEY . '_step']);
     }
 
     /**
