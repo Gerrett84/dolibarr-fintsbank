@@ -382,20 +382,11 @@ class FintsService
             }
 
             // Reinitialize connection with persisted state
+            // Note: Do NOT call getTanModes() or selectTanMode() here!
+            // The persisted state already contains the TAN mode selection.
+            // Calling these methods would start a new dialog and break the signature.
             if (!$this->initConnection($this->account, $pin, $persistedInstance)) {
                 return array('success' => false, 'error' => $this->error);
-            }
-
-            // Restore TAN mode from session
-            $storedTanModeId = isset($_SESSION[self::SESSION_KEY . '_tan_mode']) ? $_SESSION[self::SESSION_KEY . '_tan_mode'] : null;
-            if ($storedTanModeId) {
-                $tanModes = $this->fints->getTanModes();
-                foreach ($tanModes as $mode) {
-                    if ($mode->getId() == $storedTanModeId) {
-                        $this->fints->selectTanMode($mode);
-                        break;
-                    }
-                }
             }
 
             // Restore action
