@@ -164,6 +164,9 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
             // Customer invoice payment (incoming money)
             $facture = new Facture($db);
             if ($facture->fetch($invoiceId) > 0) {
+                // Load thirdparty
+                $facture->fetch_thirdparty();
+
                 // Create payment
                 $paiement = new Paiement($db);
                 $paiement->datepaye = $trans->booking_date;
@@ -229,6 +232,9 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
             // Supplier invoice payment (outgoing money)
             $facture = new FactureFournisseur($db);
             if ($facture->fetch($invoiceId) > 0) {
+                // Load thirdparty
+                $facture->fetch_thirdparty();
+
                 // Create supplier payment
                 $paiement = new PaiementFourn($db);
                 $paiement->datepaye = $trans->booking_date;

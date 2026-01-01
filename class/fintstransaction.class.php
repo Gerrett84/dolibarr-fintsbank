@@ -297,18 +297,24 @@ class FintsTransaction extends CommonObject
     {
         global $conf;
 
-        // Only match positive amounts (incoming payments)
-        if ($this->amount <= 0) {
-            return 0;
+        // Search for unpaid invoices with matching amount
+        if ($this->amount > 0) {
+            // Customer invoice (incoming payment)
+            $sql = "SELECT f.rowid, f.ref, f.total_ttc, f.ref_client";
+            $sql .= " FROM ".MAIN_DB_PREFIX."facture as f";
+            $sql .= " WHERE f.entity = ".(int)$conf->entity;
+            $sql .= " AND f.fk_statut = 1"; // Validated
+            $sql .= " AND f.paye = 0"; // Not paid
+            $sql .= " AND ABS(f.total_ttc - ".(float)$this->amount.") < ".(float)$tolerance;
+        } else {
+            // Supplier invoice (outgoing payment)
+            $sql = "SELECT f.rowid, f.ref, f.total_ttc, f.ref_supplier as ref_client";
+            $sql .= " FROM ".MAIN_DB_PREFIX."facture_fourn as f";
+            $sql .= " WHERE f.entity = ".(int)$conf->entity;
+            $sql .= " AND f.fk_statut = 1"; // Validated
+            $sql .= " AND f.paye = 0"; // Not paid
+            $sql .= " AND ABS(f.total_ttc - ".abs((float)$this->amount).") < ".(float)$tolerance;
         }
-
-        // Search for unpaid customer invoices with matching amount
-        $sql = "SELECT f.rowid, f.ref, f.total_ttc, f.ref_client";
-        $sql .= " FROM ".MAIN_DB_PREFIX."facture as f";
-        $sql .= " WHERE f.entity = ".(int)$conf->entity;
-        $sql .= " AND f.fk_statut = 1"; // Validated, not paid
-        $sql .= " AND f.paye = 0"; // Not paid
-        $sql .= " AND ABS(f.total_ttc - ".(float)$this->amount.") < ".(float)$tolerance;
 
         $resql = $this->db->query($sql);
         if ($resql) {
