@@ -56,6 +56,12 @@ MatchWithThirdParty=Assign customer/supplier
 AutoMatch=Auto match
 ImportToBank=Import to bank account
 IgnoreTransaction=Ignore transaction
+RestoreTransaction=Restore transaction
+ImportAllNew=Import all new
+TransactionImported=Transaction imported
+XTransactionsImported=%s transactions imported
+XTransactionsError=%s transactions failed
+ViewBankLine=View bank entry
 
 # Errors
 ErrorBankConnection=Bank connection error
@@ -63,6 +69,8 @@ ErrorInvalidTAN=Invalid TAN
 ErrorTANTimeout=TAN input timeout
 ErrorSyncFailed=Synchronization failed
 ErrorNoAccountSelected=No bank account selected
+ErrorBankAccountNotFound=Dolibarr bank account not found
+ErrorNoBankAccountLinked=No Dolibarr bank account linked
 
 # Info
 FintsBankDescription=Retrieve your bank statements automatically via FinTS

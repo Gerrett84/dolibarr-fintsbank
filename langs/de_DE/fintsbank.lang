@@ -56,6 +56,12 @@ MatchWithThirdParty=Kunde/Lieferant zuordnen
 AutoMatch=Automatisch zuordnen
 ImportToBank=In Bankkonto importieren
 IgnoreTransaction=Transaktion ignorieren
+RestoreTransaction=Transaktion wiederherstellen
+ImportAllNew=Alle neuen importieren
+TransactionImported=Transaktion importiert
+XTransactionsImported=%s Transaktionen importiert
+XTransactionsError=%s Transaktionen fehlgeschlagen
+ViewBankLine=Bankbuchung anzeigen
 
 # Errors
 ErrorBankConnection=Fehler bei der Bankverbindung
@@ -63,6 +69,8 @@ ErrorInvalidTAN=Ungueltige TAN
 ErrorTANTimeout=TAN-Eingabe abgelaufen
 ErrorSyncFailed=Synchronisation fehlgeschlagen
 ErrorNoAccountSelected=Kein Bankkonto ausgewaehlt
+ErrorBankAccountNotFound=Dolibarr Bankkonto nicht gefunden
+ErrorNoBankAccountLinked=Kein Dolibarr Bankkonto verknuepft
 
 # Info
 FintsBankDescription=Rufen Sie Ihre Kontoauszuege automatisch per FinTS ab

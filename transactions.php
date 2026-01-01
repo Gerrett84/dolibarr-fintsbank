@@ -62,6 +62,110 @@ if ($action == 'ignore' && GETPOST('trans_id', 'int')) {
     }
 }
 
+// Un-ignore transaction (restore to new)
+if ($action == 'unignore' && GETPOST('trans_id', 'int')) {
+    $trans = new FintsTransaction($db);
+    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        $trans->setStatus(FintsTransaction::STATUS_NEW);
+        setEventMessages($langs->trans("RecordModified"), null, 'mesgs');
+    }
+}
+
+// Import transaction to bank account
+if ($action == 'import' && GETPOST('trans_id', 'int')) {
+    $trans = new FintsTransaction($db);
+    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        // Get FinTS account to find linked Dolibarr bank account
+        $fintsAccount = new FintsAccount($db);
+        if ($fintsAccount->fetch($trans->fk_fintsbank_account) > 0 && $fintsAccount->fk_bank > 0) {
+            // Create bank line
+            $bankAccount = new Account($db);
+            if ($bankAccount->fetch($fintsAccount->fk_bank) > 0) {
+                // Add bank line
+                $bankLineId = $bankAccount->addline(
+                    $trans->booking_date,           // Date
+                    $trans->booking_text ?: 'FinTS', // Payment type
+                    $trans->description,            // Label
+                    $trans->amount,                 // Amount
+                    '',                             // Check number
+                    '',                             // Category
+                    $user,                          // User
+                    $trans->name,                   // Emetteur (sender)
+                    '',                             // Bank name
+                    '',                             // Account number
+                    $trans->value_date              // Value date
+                );
+
+                if ($bankLineId > 0) {
+                    // Link transaction to bank line
+                    $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction";
+                    $sql .= " SET fk_bank_line = ".(int)$bankLineId;
+                    $sql .= ", status = 'imported'";
+                    $sql .= " WHERE rowid = ".(int)$trans->id;
+                    $db->query($sql);
+
+                    setEventMessages($langs->trans("TransactionImported"), null, 'mesgs');
+                } else {
+                    setEventMessages($langs->trans("Error").": ".$bankAccount->error, null, 'errors');
+                }
+            } else {
+                setEventMessages($langs->trans("ErrorBankAccountNotFound"), null, 'errors');
+            }
+        } else {
+            setEventMessages($langs->trans("ErrorNoBankAccountLinked"), null, 'errors');
+        }
+    }
+}
+
+// Import all new transactions
+if ($action == 'importall' && $id > 0) {
+    $fintsAccount = new FintsAccount($db);
+    if ($fintsAccount->fetch($id) > 0 && $fintsAccount->fk_bank > 0) {
+        $bankAccount = new Account($db);
+        if ($bankAccount->fetch($fintsAccount->fk_bank) > 0) {
+            $transaction = new FintsTransaction($db);
+            $newTransactions = $transaction->fetchByAccount($id, 'new', 1000, 0);
+
+            $imported = 0;
+            $errors = 0;
+
+            foreach ($newTransactions as $trans) {
+                $bankLineId = $bankAccount->addline(
+                    $trans->booking_date,
+                    $trans->booking_text ?: 'FinTS',
+                    $trans->description,
+                    $trans->amount,
+                    '', '', $user,
+                    $trans->name,
+                    '', '',
+                    $trans->value_date
+                );
+
+                if ($bankLineId > 0) {
+                    $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction";
+                    $sql .= " SET fk_bank_line = ".(int)$bankLineId;
+                    $sql .= ", status = 'imported'";
+                    $sql .= " WHERE rowid = ".(int)$trans->id;
+                    $db->query($sql);
+                    $imported++;
+                } else {
+                    $errors++;
+                }
+            }
+
+            if ($imported > 0) {
+                setEventMessages(sprintf($langs->trans("XTransactionsImported"), $imported), null, 'mesgs');
+            }
+            if ($errors > 0) {
+                setEventMessages(sprintf($langs->trans("XTransactionsError"), $errors), null, 'warnings');
+            }
+            if ($imported == 0 && $errors == 0) {
+                setEventMessages($langs->trans("NoNewTransactions"), null, 'warnings');
+            }
+        }
+    }
+}
+
 /*
  * View
  */
@@ -209,8 +313,23 @@ if (count($transactions) > 0) {
         // Actions
         print '<td class="right nowrap">';
         if ($trans->status == 'new') {
+            // Import to bank
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=import&trans_id='.$trans->id.'&id='.$id.'&token='.newToken().'" title="'.$langs->trans("ImportToBank").'">';
+            print img_picto($langs->trans("ImportToBank"), 'add', 'class="paddingright"');
+            print '</a>';
+            // Ignore
             print '<a href="'.$_SERVER["PHP_SELF"].'?action=ignore&trans_id='.$trans->id.'&id='.$id.'&token='.newToken().'" title="'.$langs->trans("IgnoreTransaction").'">';
             print img_picto($langs->trans("IgnoreTransaction"), 'disable');
+            print '</a>';
+        } elseif ($trans->status == 'ignored') {
+            // Un-ignore (restore)
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=unignore&trans_id='.$trans->id.'&id='.$id.'&token='.newToken().'" title="'.$langs->trans("RestoreTransaction").'">';
+            print img_picto($langs->trans("RestoreTransaction"), 'undo');
+            print '</a>';
+        } elseif ($trans->status == 'imported' && $trans->fk_bank_line > 0) {
+            // Link to bank line
+            print '<a href="'.DOL_URL_ROOT.'/compta/bank/line.php?rowid='.$trans->fk_bank_line.'" title="'.$langs->trans("ViewBankLine").'">';
+            print img_picto($langs->trans("ViewBankLine"), 'bank_account');
             print '</a>';
         }
         print '</td>';
@@ -239,11 +358,19 @@ if ($total > $limit) {
     print '</div>';
 }
 
-// Sync button
+// Action buttons
 print '<div class="tabsAction">';
+
+// Import all new transactions
+print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=importall&id='.$id.'&token='.newToken().'">';
+print '<i class="fas fa-download"></i> '.$langs->trans("ImportAllNew");
+print '</a>';
+
+// Sync
 print '<a class="butAction" href="'.dol_buildpath('/fintsbank/sync.php', 1).'?id='.$id.'">';
 print '<i class="fas fa-sync"></i> '.$langs->trans("SyncNow");
 print '</a>';
+
 print '</div>';
 
 print dol_get_fiche_end();
