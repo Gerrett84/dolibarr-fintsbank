@@ -54,14 +54,20 @@ MatchTransaction=Transaktion zuordnen
 MatchWithInvoice=Mit Rechnung verknuepfen
 MatchWithThirdParty=Kunde/Lieferant zuordnen
 AutoMatch=Automatisch zuordnen
+AutoMatchAll=Alle automatisch zuordnen
 ImportToBank=In Bankkonto importieren
 IgnoreTransaction=Transaktion ignorieren
 RestoreTransaction=Transaktion wiederherstellen
 ImportAllNew=Alle neuen importieren
 TransactionImported=Transaktion importiert
+TransactionMatched=Transaktion zugeordnet
 XTransactionsImported=%s Transaktionen importiert
+XTransactionsMatched=%s Transaktionen zugeordnet
 XTransactionsError=%s Transaktionen fehlgeschlagen
+NoMatchFound=Keine passende Rechnung gefunden
 ViewBankLine=Bankbuchung anzeigen
+ViewInvoice=Rechnung anzeigen
+Unmatch=Zuordnung aufheben
 
 # Errors
 ErrorBankConnection=Fehler bei der Bankverbindung

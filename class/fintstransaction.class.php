@@ -282,6 +282,137 @@ class FintsTransaction extends CommonObject
     }
 
     /**
+     * Try to auto-match transaction with an invoice
+     * Matches by amount and optionally by reference in description
+     *
+     * @param float $tolerance Amount tolerance (default 0.01)
+     * @return int Invoice ID if matched, 0 if no match
+     */
+    public function autoMatch($tolerance = 0.01)
+    {
+        global $conf;
+
+        // Only match positive amounts (incoming payments)
+        if ($this->amount <= 0) {
+            return 0;
+        }
+
+        // Search for unpaid customer invoices with matching amount
+        $sql = "SELECT f.rowid, f.ref, f.total_ttc, f.ref_client";
+        $sql .= " FROM ".MAIN_DB_PREFIX."facture as f";
+        $sql .= " WHERE f.entity = ".(int)$conf->entity;
+        $sql .= " AND f.fk_statut = 1"; // Validated, not paid
+        $sql .= " AND f.paye = 0"; // Not paid
+        $sql .= " AND ABS(f.total_ttc - ".(float)$this->amount.") < ".(float)$tolerance;
+
+        $resql = $this->db->query($sql);
+        if ($resql) {
+            $matches = array();
+            while ($obj = $this->db->fetch_object($resql)) {
+                $score = 0;
+
+                // Check if invoice ref appears in description
+                if ($this->description && $obj->ref) {
+                    if (stripos($this->description, $obj->ref) !== false) {
+                        $score += 100;
+                    }
+                }
+
+                // Check if client ref appears in description
+                if ($this->description && $obj->ref_client) {
+                    if (stripos($this->description, $obj->ref_client) !== false) {
+                        $score += 50;
+                    }
+                }
+
+                // Check if end-to-end ID matches invoice ref
+                if ($this->end_to_end_id && $obj->ref) {
+                    if (stripos($this->end_to_end_id, $obj->ref) !== false) {
+                        $score += 80;
+                    }
+                }
+
+                $matches[] = array('id' => $obj->rowid, 'ref' => $obj->ref, 'score' => $score);
+            }
+
+            // Sort by score descending
+            usort($matches, function($a, $b) {
+                return $b['score'] - $a['score'];
+            });
+
+            // Return best match if score > 0, or first exact amount match
+            if (!empty($matches)) {
+                if ($matches[0]['score'] > 0) {
+                    return $matches[0]['id'];
+                }
+                // Only one exact amount match = good enough
+                if (count($matches) == 1) {
+                    return $matches[0]['id'];
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Get potential invoice matches for manual selection
+     *
+     * @param float $tolerance Amount tolerance
+     * @param int $limit Max results
+     * @return array Array of potential matches
+     */
+    public function getPotentialMatches($tolerance = 5.0, $limit = 20)
+    {
+        global $conf;
+
+        $matches = array();
+
+        // For positive amounts, search customer invoices
+        if ($this->amount > 0) {
+            $sql = "SELECT f.rowid, f.ref, f.ref_client, f.total_ttc, f.datef,";
+            $sql .= " s.nom as thirdparty_name";
+            $sql .= " FROM ".MAIN_DB_PREFIX."facture as f";
+            $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe as s ON f.fk_soc = s.rowid";
+            $sql .= " WHERE f.entity = ".(int)$conf->entity;
+            $sql .= " AND f.fk_statut = 1"; // Validated
+            $sql .= " AND f.paye = 0"; // Not paid
+            $sql .= " AND ABS(f.total_ttc - ".(float)$this->amount.") < ".(float)$tolerance;
+            $sql .= " ORDER BY ABS(f.total_ttc - ".(float)$this->amount.") ASC";
+            $sql .= " LIMIT ".(int)$limit;
+        } else {
+            // For negative amounts, search supplier invoices
+            $sql = "SELECT f.rowid, f.ref, f.ref_supplier as ref_client, f.total_ttc, f.datef,";
+            $sql .= " s.nom as thirdparty_name";
+            $sql .= " FROM ".MAIN_DB_PREFIX."facture_fourn as f";
+            $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe as s ON f.fk_soc = s.rowid";
+            $sql .= " WHERE f.entity = ".(int)$conf->entity;
+            $sql .= " AND f.fk_statut = 1"; // Validated
+            $sql .= " AND f.paye = 0"; // Not paid
+            $sql .= " AND ABS(f.total_ttc - ".abs((float)$this->amount).") < ".(float)$tolerance;
+            $sql .= " ORDER BY ABS(f.total_ttc - ".abs((float)$this->amount).") ASC";
+            $sql .= " LIMIT ".(int)$limit;
+        }
+
+        $resql = $this->db->query($sql);
+        if ($resql) {
+            while ($obj = $this->db->fetch_object($resql)) {
+                $matches[] = array(
+                    'id' => $obj->rowid,
+                    'ref' => $obj->ref,
+                    'ref_client' => $obj->ref_client,
+                    'amount' => $obj->total_ttc,
+                    'date' => $obj->datef,
+                    'thirdparty' => $obj->thirdparty_name,
+                    'type' => $this->amount > 0 ? 'customer' : 'supplier'
+                );
+            }
+        }
+
+        return $matches;
+    }
+
+    /**
      * Get status label
      *
      * @param string $status Status code

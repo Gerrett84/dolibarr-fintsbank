@@ -130,6 +130,62 @@ if ($action == 'import' && GETPOST('trans_id', 'int')) {
     }
 }
 
+// Auto-match single transaction
+if ($action == 'automatch' && GETPOST('trans_id', 'int')) {
+    $trans = new FintsTransaction($db);
+    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        $invoiceId = $trans->autoMatch();
+        if ($invoiceId > 0) {
+            $trans->linkToInvoice($invoiceId);
+            setEventMessages($langs->trans("TransactionMatched"), null, 'mesgs');
+        } else {
+            setEventMessages($langs->trans("NoMatchFound"), null, 'warnings');
+        }
+    }
+}
+
+// Manual match with invoice
+if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'int')) {
+    $trans = new FintsTransaction($db);
+    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        $trans->linkToInvoice(GETPOST('invoice_id', 'int'));
+        setEventMessages($langs->trans("TransactionMatched"), null, 'mesgs');
+    }
+}
+
+// Unmatch (remove invoice link)
+if ($action == 'unmatch' && GETPOST('trans_id', 'int')) {
+    $trans = new FintsTransaction($db);
+    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction";
+        $sql .= " SET fk_facture = NULL, status = 'new'";
+        $sql .= " WHERE rowid = ".(int)$trans->id;
+        $db->query($sql);
+        setEventMessages($langs->trans("RecordModified"), null, 'mesgs');
+    }
+}
+
+// Auto-match all new transactions
+if ($action == 'automatchall' && $id > 0) {
+    $transaction = new FintsTransaction($db);
+    $newTransactions = $transaction->fetchByAccount($id, 'new', 1000, 0);
+
+    $matched = 0;
+    foreach ($newTransactions as $trans) {
+        $invoiceId = $trans->autoMatch();
+        if ($invoiceId > 0) {
+            $trans->linkToInvoice($invoiceId);
+            $matched++;
+        }
+    }
+
+    if ($matched > 0) {
+        setEventMessages(sprintf($langs->trans("XTransactionsMatched"), $matched), null, 'mesgs');
+    } else {
+        setEventMessages($langs->trans("NoMatchFound"), null, 'warnings');
+    }
+}
+
 // Import all new transactions
 if ($action == 'importall' && $id > 0) {
     $fintsAccount = new FintsAccount($db);
@@ -196,6 +252,32 @@ if ($action == 'importall' && $id > 0) {
 
 $page_name = "Transactions";
 llxHeader('', $langs->trans($page_name));
+
+// JavaScript for match dropdown
+print '<script>
+function toggleMatchDropdown(id) {
+    // Close all other dropdowns
+    document.querySelectorAll(".match-dropdown").forEach(function(el) {
+        if (el.id !== "matchdrop_" + id) {
+            el.style.display = "none";
+        }
+    });
+    // Toggle this dropdown
+    var dropdown = document.getElementById("matchdrop_" + id);
+    dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
+}
+// Close dropdown when clicking outside
+document.addEventListener("click", function(e) {
+    if (!e.target.closest(".inline-block")) {
+        document.querySelectorAll(".match-dropdown").forEach(function(el) {
+            el.style.display = "none";
+        });
+    }
+});
+</script>';
+print '<style>
+.match-dropdown a.match-item:hover { background: #f0f0f0; }
+</style>';
 
 print load_fiche_titre($langs->trans("Transactions"), '', 'fa-university');
 
@@ -337,17 +419,53 @@ if (count($transactions) > 0) {
         // Actions
         print '<td class="right nowrap">';
         if ($trans->status == 'new') {
+            // Auto-match with invoice
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=automatch&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("AutoMatch").'">';
+            print img_picto($langs->trans("AutoMatch"), 'link', 'class="paddingright"');
+            print '</a>';
+            // Manual match dropdown
+            $potentialMatches = $trans->getPotentialMatches(10.0, 10);
+            if (count($potentialMatches) > 0) {
+                print '<div class="inline-block" style="position: relative;">';
+                print '<a href="#" onclick="toggleMatchDropdown('.$trans->id.'); return false;" title="'.$langs->trans("MatchWithInvoice").'">';
+                print img_picto($langs->trans("MatchWithInvoice"), 'object_bill', 'class="paddingright"');
+                print '</a>';
+                print '<div id="matchdrop_'.$trans->id.'" class="match-dropdown" style="display:none; position:absolute; right:0; top:20px; background:#fff; border:1px solid #ccc; padding:5px; z-index:100; min-width:250px; box-shadow:2px 2px 5px rgba(0,0,0,0.2);">';
+                foreach ($potentialMatches as $match) {
+                    print '<a href="'.$_SERVER["PHP_SELF"].'?action=match&trans_id='.$trans->id.'&invoice_id='.$match['id'].'&id='.$id.'&status='.$status.'&token='.newToken().'" class="match-item" style="display:block; padding:3px 5px; text-decoration:none; color:#333;">';
+                    print '<strong>'.$match['ref'].'</strong> - '.price($match['amount'], 0, $langs, 1, -1, 2).'<br>';
+                    print '<small>'.$match['thirdparty'].'</small>';
+                    print '</a>';
+                }
+                print '</div>';
+                print '</div>';
+            }
             // Import to bank
-            print '<a href="'.$_SERVER["PHP_SELF"].'?action=import&trans_id='.$trans->id.'&id='.$id.'&token='.newToken().'" title="'.$langs->trans("ImportToBank").'">';
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=import&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("ImportToBank").'">';
             print img_picto($langs->trans("ImportToBank"), 'add', 'class="paddingright"');
             print '</a>';
             // Ignore
-            print '<a href="'.$_SERVER["PHP_SELF"].'?action=ignore&trans_id='.$trans->id.'&id='.$id.'&token='.newToken().'" title="'.$langs->trans("IgnoreTransaction").'">';
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=ignore&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("IgnoreTransaction").'">';
             print img_picto($langs->trans("IgnoreTransaction"), 'disable');
+            print '</a>';
+        } elseif ($trans->status == 'matched') {
+            // Show linked invoice
+            if ($trans->fk_facture > 0) {
+                print '<a href="'.DOL_URL_ROOT.'/compta/facture/card.php?facid='.$trans->fk_facture.'" title="'.$langs->trans("ViewInvoice").'">';
+                print img_picto($langs->trans("ViewInvoice"), 'bill', 'class="paddingright"');
+                print '</a>';
+            }
+            // Import to bank (even if matched)
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=import&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("ImportToBank").'">';
+            print img_picto($langs->trans("ImportToBank"), 'add', 'class="paddingright"');
+            print '</a>';
+            // Unmatch
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=unmatch&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("Unmatch").'">';
+            print img_picto($langs->trans("Unmatch"), 'unlink');
             print '</a>';
         } elseif ($trans->status == 'ignored') {
             // Un-ignore (restore)
-            print '<a href="'.$_SERVER["PHP_SELF"].'?action=unignore&trans_id='.$trans->id.'&id='.$id.'&token='.newToken().'" title="'.$langs->trans("RestoreTransaction").'">';
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=unignore&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("RestoreTransaction").'">';
             print img_picto($langs->trans("RestoreTransaction"), 'undo');
             print '</a>';
         } elseif ($trans->status == 'imported' && $trans->fk_bank_line > 0) {
@@ -384,6 +502,11 @@ if ($total > $limit) {
 
 // Action buttons
 print '<div class="tabsAction">';
+
+// Auto-match all new transactions
+print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=automatchall&id='.$id.'&token='.newToken().'">';
+print '<i class="fas fa-magic"></i> '.$langs->trans("AutoMatchAll");
+print '</a>';
 
 // Import all new transactions
 print '<a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=importall&id='.$id.'&token='.newToken().'">';

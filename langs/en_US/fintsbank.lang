@@ -54,14 +54,20 @@ MatchTransaction=Match transaction
 MatchWithInvoice=Link with invoice
 MatchWithThirdParty=Assign customer/supplier
 AutoMatch=Auto match
+AutoMatchAll=Auto match all
 ImportToBank=Import to bank account
 IgnoreTransaction=Ignore transaction
 RestoreTransaction=Restore transaction
 ImportAllNew=Import all new
 TransactionImported=Transaction imported
+TransactionMatched=Transaction matched
 XTransactionsImported=%s transactions imported
+XTransactionsMatched=%s transactions matched
 XTransactionsError=%s transactions failed
+NoMatchFound=No matching invoice found
 ViewBankLine=View bank entry
+ViewInvoice=View invoice
+Unmatch=Remove match
 
 # Errors
 ErrorBankConnection=Bank connection error
