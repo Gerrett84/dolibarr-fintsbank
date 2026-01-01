@@ -34,6 +34,7 @@ require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/paiement/class/paiement.class.php';
 require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
 require_once DOL_DOCUMENT_ROOT.'/fourn/class/paiementfourn.class.php';
+require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once('/fintsbank/class/fintsaccount.class.php');
 dol_include_once('/fintsbank/class/fintstransaction.class.php');
 
@@ -210,8 +211,11 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                             }
                         }
                     }
-                    // Link transaction to invoice
+                    // Link transaction to invoice and third party
                     $trans->linkToInvoice($invoiceId);
+                    if ($facture->fk_soc > 0) {
+                        $trans->linkToThirdParty($facture->fk_soc);
+                    }
                     setEventMessages($langs->trans("PaymentCreated"), null, 'mesgs');
                 } else {
                     $error++;
@@ -268,7 +272,11 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                             }
                         }
                     }
+                    // Link transaction to invoice and third party
                     $trans->linkToInvoice($invoiceId);
+                    if ($facture->fk_soc > 0) {
+                        $trans->linkToThirdParty($facture->fk_soc);
+                    }
                     setEventMessages($langs->trans("PaymentCreated"), null, 'mesgs');
                 } else {
                     $error++;
@@ -288,12 +296,14 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
     }
 }
 
-// Unmatch (remove invoice link)
+// Unmatch (remove invoice and third party link)
 if ($action == 'unmatch' && GETPOST('trans_id', 'int')) {
     $trans = new FintsTransaction($db);
     if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        // Keep imported status if already imported, otherwise set to new
+        $newStatus = ($trans->status == 'imported') ? 'imported' : 'new';
         $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction";
-        $sql .= " SET fk_facture = NULL, status = 'new'";
+        $sql .= " SET fk_facture = NULL, fk_societe = NULL, status = '".$newStatus."'";
         $sql .= " WHERE rowid = ".(int)$trans->id;
         $db->query($sql);
         setEventMessages($langs->trans("RecordModified"), null, 'mesgs');
@@ -526,7 +536,20 @@ if (count($transactions) > 0) {
 
         // Counter party
         print '<td>';
-        print dol_escape_htmltag($trans->name);
+        // Show linked third party if available
+        if ($trans->fk_societe > 0) {
+            $societe = new Societe($db);
+            if ($societe->fetch($trans->fk_societe) > 0) {
+                print '<a href="'.DOL_URL_ROOT.'/societe/card.php?socid='.$trans->fk_societe.'">';
+                print img_picto('', 'company', 'class="paddingright"');
+                print dol_escape_htmltag($societe->name);
+                print '</a>';
+            } else {
+                print dol_escape_htmltag($trans->name);
+            }
+        } else {
+            print dol_escape_htmltag($trans->name);
+        }
         if ($trans->iban) {
             print '<br><small class="opacitymedium">'.dol_escape_htmltag($trans->iban).'</small>';
         }
