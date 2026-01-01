@@ -347,8 +347,8 @@ class FintsService
             }
 
             // No TAN needed - process statements
-            $statements = $getStatement->getStatements();
-            return $this->processStatements($statements);
+            $statement = $getStatement->getStatement();
+            return $this->processStatements($statement ? array($statement) : array());
 
         } catch (\Exception $e) {
             return array('success' => false, 'error' => $e->getMessage());
@@ -437,8 +437,8 @@ class FintsService
 
             // Statement step - process the results
             $this->clearState();
-            $statements = $action->getStatements();
-            return $this->processStatements($statements);
+            $statement = $action->getStatement();
+            return $this->processStatements($statement ? array($statement) : array());
 
         } catch (\Exception $e) {
             $this->clearState();
@@ -518,8 +518,8 @@ class FintsService
 
             // No TAN needed - process statements
             $this->clearState();
-            $statements = $getStatement->getStatements();
-            return $this->processStatements($statements);
+            $statement = $getStatement->getStatement();
+            return $this->processStatements($statement ? array($statement) : array());
 
         } catch (\Exception $e) {
             $this->clearState();
