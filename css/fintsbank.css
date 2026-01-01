@@ -1,0 +1,93 @@
+/* FinTS Bank Module CSS */
+
+/* Sync page styles */
+.sync-step {
+    margin: 20px 0;
+}
+
+.sync-step .card {
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Button styles */
+.sync-step .button {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #0073aa;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.sync-step .button:hover {
+    background-color: #005a87;
+}
+
+.sync-step .button-cancel {
+    background-color: #6c757d;
+}
+
+.sync-step .button-cancel:hover {
+    background-color: #545b62;
+}
+
+/* Input styles */
+.sync-step input[type="password"],
+.sync-step input[type="text"],
+.sync-step input[type="date"] {
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.sync-step input:focus {
+    outline: none;
+    border-color: #0073aa;
+    box-shadow: 0 0 0 2px rgba(0, 115, 170, 0.2);
+}
+
+/* PhotoTAN image */
+#phototan-img {
+    max-width: 300px;
+    border: 2px solid #333;
+    border-radius: 4px;
+}
+
+/* Loading spinner */
+.fa-spin {
+    animation: fa-spin 1s infinite linear;
+}
+
+@keyframes fa-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Transaction list styles */
+.transaction-list {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.transaction-list th,
+.transaction-list td {
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.transaction-list tr:hover {
+    background-color: #f5f5f5;
+}
+
+.transaction-credit {
+    color: #28a745;
+}
+
+.transaction-debit {
+    color: #dc3545;
+}

@@ -13,6 +13,20 @@
  * \brief      AJAX handler for bank sync
  */
 
+// Dolibarr AJAX configuration - must be before main.inc.php
+if (!defined('NOTOKENRENEWAL')) {
+    define('NOTOKENRENEWAL', '1'); // Disable token renewal for AJAX
+}
+if (!defined('NOREQUIREMENU')) {
+    define('NOREQUIREMENU', '1');
+}
+if (!defined('NOREQUIREHTML')) {
+    define('NOREQUIREHTML', '1');
+}
+if (!defined('NOREQUIREAJAX')) {
+    define('NOREQUIREAJAX', '1');
+}
+
 // Disable output buffering for real-time response
 if (ob_get_level()) ob_end_clean();
 
@@ -45,9 +59,12 @@ if (!$user->rights->fintsbank->sync) {
     exit;
 }
 
-// CSRF check
-if (!verifToken()) {
-    echo json_encode(array('success' => false, 'error' => 'Invalid token'));
+// CSRF check - with NOTOKENRENEWAL, check against newtoken (not rotated)
+$token = GETPOST('token', 'alpha');
+$sessionToken = isset($_SESSION['newtoken']) ? $_SESSION['newtoken'] : (isset($_SESSION['token']) ? $_SESSION['token'] : '');
+if (empty($token) || $token != $sessionToken) {
+    dol_syslog("FinTS CSRF check failed: received=$token, session=$sessionToken", LOG_WARNING);
+    echo json_encode(array('success' => false, 'error' => 'Invalid security token'));
     exit;
 }
 
