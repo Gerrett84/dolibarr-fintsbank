@@ -81,10 +81,23 @@ if ($action == 'import' && GETPOST('trans_id', 'int')) {
             // Create bank line
             $bankAccount = new Account($db);
             if ($bankAccount->fetch($fintsAccount->fk_bank) > 0) {
+                // Map booking text to valid payment type code
+                $paymentType = 'VIR'; // Default: Virement/Transfer
+                $bookingTextLower = strtolower($trans->booking_text ?: '');
+                if (strpos($bookingTextLower, 'lastschrift') !== false || strpos($bookingTextLower, 'einzug') !== false) {
+                    $paymentType = 'PRE'; // Prelevement/Direct debit
+                } elseif (strpos($bookingTextLower, 'dauerauftrag') !== false) {
+                    $paymentType = 'VIR';
+                } elseif (strpos($bookingTextLower, 'kartenzahlung') !== false || strpos($bookingTextLower, 'card') !== false) {
+                    $paymentType = 'CB';  // Carte bancaire
+                } elseif (strpos($bookingTextLower, 'bargeld') !== false || strpos($bookingTextLower, 'automat') !== false) {
+                    $paymentType = 'LIQ'; // Liquide/Cash
+                }
+
                 // Add bank line
                 $bankLineId = $bankAccount->addline(
                     $trans->booking_date,           // Date
-                    $trans->booking_text ?: 'FinTS', // Payment type
+                    $paymentType,                   // Payment type (short code)
                     $trans->description,            // Label
                     $trans->amount,                 // Amount
                     '',                             // Check number
@@ -130,9 +143,20 @@ if ($action == 'importall' && $id > 0) {
             $errors = 0;
 
             foreach ($newTransactions as $trans) {
+                // Map booking text to valid payment type code
+                $paymentType = 'VIR'; // Default: Virement/Transfer
+                $bookingTextLower = strtolower($trans->booking_text ?: '');
+                if (strpos($bookingTextLower, 'lastschrift') !== false || strpos($bookingTextLower, 'einzug') !== false) {
+                    $paymentType = 'PRE';
+                } elseif (strpos($bookingTextLower, 'kartenzahlung') !== false || strpos($bookingTextLower, 'card') !== false) {
+                    $paymentType = 'CB';
+                } elseif (strpos($bookingTextLower, 'bargeld') !== false || strpos($bookingTextLower, 'automat') !== false) {
+                    $paymentType = 'LIQ';
+                }
+
                 $bankLineId = $bankAccount->addline(
                     $trans->booking_date,
-                    $trans->booking_text ?: 'FinTS',
+                    $paymentType,
                     $trans->description,
                     $trans->amount,
                     '', '', $user,
