@@ -194,10 +194,10 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                         $sql .= ", '(Payment)', 'payment')";
                         $db->query($sql);
 
-                        if ($facture->fk_soc > 0) {
+                        if ($facture->socid > 0) {
                             $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type)";
-                            $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$facture->fk_soc;
-                            $sql .= ", '/societe/card.php?socid=".$facture->fk_soc."'";
+                            $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$facture->socid;
+                            $sql .= ", '/societe/card.php?socid=".$facture->socid."'";
                             $sql .= ", '".$db->escape($facture->thirdparty->name)."', 'company')";
                             $db->query($sql);
                         }
@@ -216,8 +216,8 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                     }
                     // Link transaction to invoice and third party
                     $trans->linkToInvoice($invoiceId);
-                    if ($facture->fk_soc > 0) {
-                        $trans->linkToThirdParty($facture->fk_soc);
+                    if ($facture->socid > 0) {
+                        $trans->linkToThirdParty($facture->socid);
                     }
                     setEventMessages($langs->trans("PaymentCreated"), null, 'mesgs');
                 } else {
@@ -260,10 +260,10 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                         $sql .= ", '(SupplierPayment)', 'payment_supplier')";
                         $db->query($sql);
 
-                        if ($facture->fk_soc > 0) {
+                        if ($facture->socid > 0) {
                             $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type)";
-                            $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$facture->fk_soc;
-                            $sql .= ", '/societe/card.php?socid=".$facture->fk_soc."'";
+                            $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$facture->socid;
+                            $sql .= ", '/societe/card.php?socid=".$facture->socid."'";
                             $sql .= ", '".$db->escape($facture->thirdparty->name)."', 'company')";
                             $db->query($sql);
                         }
@@ -280,8 +280,8 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                     }
                     // Link transaction to invoice and third party
                     $trans->linkToInvoice($invoiceId);
-                    if ($facture->fk_soc > 0) {
-                        $trans->linkToThirdParty($facture->fk_soc);
+                    if ($facture->socid > 0) {
+                        $trans->linkToThirdParty($facture->socid);
                     }
                     setEventMessages($langs->trans("PaymentCreated"), null, 'mesgs');
                 } else {

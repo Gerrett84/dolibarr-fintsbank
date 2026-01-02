@@ -566,7 +566,18 @@ class FintsService
                         // Fill data
                         $fintsTransaction->booking_date = $transaction->getBookingDate()->getTimestamp();
                         $fintsTransaction->value_date = $transaction->getValutaDate() ? $transaction->getValutaDate()->getTimestamp() : null;
-                        $fintsTransaction->amount = $transaction->getAmount();
+
+                        // Get amount with correct sign based on credit/debit
+                        $amount = $transaction->getAmount();
+                        $creditDebit = $transaction->getCreditDebit();
+                        // D = Debit (outgoing), C = Credit (incoming)
+                        // RD = Reversal Debit, RC = Reversal Credit
+                        if ($creditDebit == 'D' || $creditDebit == 'RC') {
+                            $amount = -abs($amount); // Outgoing = negative
+                        } else {
+                            $amount = abs($amount); // Incoming = positive
+                        }
+                        $fintsTransaction->amount = $amount;
                         $fintsTransaction->currency = 'EUR';
                         $fintsTransaction->name = $transaction->getName();
                         $fintsTransaction->iban = $transaction->getAccountNumber();
