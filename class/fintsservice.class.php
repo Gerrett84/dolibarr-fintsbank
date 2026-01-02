@@ -571,12 +571,8 @@ class FintsService
                         $amount = $transaction->getAmount();
                         $creditDebit = $transaction->getCreditDebit();
 
-                        // Debug: Log credit/debit value
-                        dol_syslog("FinTS Transaction: amount=".$amount.", creditDebit='".$creditDebit."' (type: ".gettype($creditDebit).")", LOG_DEBUG);
-
                         // D = Debit (outgoing), C = Credit (incoming)
                         // RD = Reversal Debit, RC = Reversal Credit
-                        // Also check lowercase and common variations
                         $creditDebitUpper = strtoupper(trim($creditDebit));
                         if ($creditDebitUpper == 'D' || $creditDebitUpper == 'RC' || $creditDebitUpper == 'DEBIT') {
                             $amount = -abs($amount); // Outgoing = negative

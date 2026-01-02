@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 1.0.0** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 1.1.0** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -14,7 +14,7 @@
 - **Automatischer Abruf** - Kontoauszuege direkt von der Bank abrufen
 - **TAN-Unterstuetzung** - photoTAN, pushTAN, chipTAN
 - **Mehrere Konten** - Beliebig viele Bankverbindungen verwalten
-- **Transaktions-Import** - Buchungen ins Dolibarr-Bankkonto uebernehmen
+- **Korrekte Vorzeichen** - Einnahmen positiv, Ausgaben negativ
 
 ### Unterstuetzte Banken
 - Commerzbank
@@ -26,10 +26,32 @@
 - Und viele weitere FinTS-faehige Banken
 
 ### Transaktionsverwaltung
-- **Status-Tracking** - Neu, Zugeordnet, Importiert, Ignoriert
+- **Status-Tracking** - Neu, Importiert, Ignoriert
 - **Massen-Import** - Alle neuen Transaktionen auf einmal importieren
 - **Ignorieren/Wiederherstellen** - Transaktionen ausblenden und wiederherstellen
 - **Bank-Verknuepfung** - Direkter Link zur Dolibarr-Bankbuchung
+- **Transaktionen loeschen** - Fuer erneuten Sync
+
+### Rechnungszuordnung (NEU in v1.1)
+- **Automatische Zuordnung** - Rechnungen anhand Betrag und Referenz finden
+- **Manuelle Zuordnung** - Dropdown mit passenden Rechnungen
+- **Zahlungserstellung** - Echte Dolibarr-Zahlung wird erstellt
+- **Kunden/Lieferanten-Verknuepfung** - Drittpartei wird automatisch zugeordnet
+- **Kunden- und Lieferantenrechnungen** - Beide werden unterstuetzt
+
+---
+
+## Backup-Hinweis
+
+**Vor der Installation oder einem Update:**
+
+```bash
+# Dolibarr-Datenbank sichern
+mysqldump -u root -p dolibarr > dolibarr_backup_$(date +%Y%m%d).sql
+
+# Dolibarr-Dateien sichern
+tar -czvf dolibarr_files_$(date +%Y%m%d).tar.gz /var/www/dolibarr
+```
 
 ---
 
@@ -48,7 +70,7 @@ composer install
 chown -R www-data:www-data /var/www/dolibarr/htdocs/custom/fintsbank
 
 # 4. In Dolibarr aktivieren
-# Setup → Module → FinTS Bank → Aktivieren
+# Setup -> Module -> FinTS Bank -> Aktivieren
 ```
 
 **Voraussetzungen:**
@@ -62,7 +84,7 @@ chown -R www-data:www-data /var/www/dolibarr/htdocs/custom/fintsbank
 
 ### Bankverbindung einrichten
 
-1. **FinTS Bank → Bankverbindungen → Neu**
+1. **FinTS Bank -> Bankverbindungen -> Neu**
 2. Dolibarr-Bankkonto auswaehlen (muss bereits existieren)
 3. Bankdaten eingeben:
    - **BLZ** - 8-stellige Bankleitzahl
@@ -85,23 +107,46 @@ chown -R www-data:www-data /var/www/dolibarr/htdocs/custom/fintsbank
 
 ## Verwendung
 
+### Workflow
+
+```
+1. Sync      ->  2. Import      ->  3. Zuordnung
+(von Bank)       (ins Bankkonto)    (mit Rechnung)
+```
+
 ### Kontoabruf
 
-1. **FinTS Bank → Kontoabruf**
+1. **FinTS Bank -> Kontoabruf**
 2. Bankkonto auswaehlen
 3. PIN eingeben
 4. TAN eingeben (photoTAN/pushTAN)
-5. Transaktionen werden automatisch importiert
+5. Transaktionen werden automatisch geladen
 
 ### Transaktionen verwalten
 
-1. **FinTS Bank → Transaktionen**
+1. **FinTS Bank -> Transaktionen**
 2. Neue Transaktionen pruefen
-3. Aktionen:
-   - **Importieren** (➕) - Einzelne Transaktion ins Bankkonto
+3. **Schritt 1 - Import:**
+   - **Importieren** - Einzelne Transaktion ins Bankkonto
    - **Alle importieren** - Alle neuen auf einmal
    - **Ignorieren** - Transaktion ausblenden
-   - **Wiederherstellen** - Ignorierte zurueckholen
+4. **Schritt 2 - Zuordnung (nach Import):**
+   - **Auto-Match** - Automatisch passende Rechnung finden
+   - **Manuell** - Rechnung aus Dropdown waehlen
+   - **Alle zuordnen** - Alle importierten automatisch zuordnen
+
+### Rechnungszuordnung
+
+Nach dem Import koennen Transaktionen mit Rechnungen verknuepft werden:
+
+- **Einnahmen** (positive Betraege) -> Kundenrechnungen
+- **Ausgaben** (negative Betraege) -> Lieferantenrechnungen
+
+Bei der Zuordnung wird automatisch:
+- Eine echte Dolibarr-Zahlung erstellt
+- Die Rechnung als bezahlt markiert
+- Der Kunde/Lieferant verknuepft
+- Die Bankbuchung mit der Zahlung verbunden
 
 ---
 
@@ -130,9 +175,23 @@ chown -R www-data:www-data /var/www/dolibarr/htdocs/custom/fintsbank
 - Dolibarr-Bankkonto mit FinTS-Konto verknuepft?
 - Berechtigungen fuer Bankmodul vorhanden?
 
+**Falsche Vorzeichen?**
+- Transaktionen loeschen und neu synchronisieren
+- Ab v1.1 werden Vorzeichen korrekt erkannt
+
 ---
 
 ## Changelog
+
+### v1.1.0 (2026-01-02)
+- **Rechnungszuordnung** - Transaktionen mit Rechnungen verknuepfen
+- **Zahlungserstellung** - Echte Dolibarr-Zahlungen werden erstellt
+- **Kunden/Lieferanten** - Automatische Verknuepfung bei Zuordnung
+- **Lieferantenrechnungen** - Unterstuetzung fuer Ausgaben
+- **Korrekte Vorzeichen** - Einnahmen positiv, Ausgaben negativ
+- **Workflow verbessert** - Erst Import, dann Zuordnung
+- **Transaktionen loeschen** - Fuer erneuten Sync
+- **Debug-Code entfernt** - Sauberer Produktionscode
 
 ### v1.0.0 (2026-01-01)
 - Erster stabiler Release
@@ -157,4 +216,4 @@ GPL v3 oder hoeher
 
 ---
 
-**Feedback?** → [GitHub Issues](https://github.com/Gerrett84/dolibarr-fintsbank/issues)
+**Feedback?** -> [GitHub Issues](https://github.com/Gerrett84/dolibarr-fintsbank/issues)
