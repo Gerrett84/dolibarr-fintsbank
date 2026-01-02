@@ -317,17 +317,12 @@ if ($action == 'unmatch' && GETPOST('trans_id', 'int')) {
 }
 
 // Delete all transactions for account (for re-sync)
-if ($action == 'deleteall' && $id > 0) {
-    $confirm = GETPOST('confirm', 'alpha');
-    if ($confirm == 'yes') {
-        $sql = "DELETE FROM ".MAIN_DB_PREFIX."fintsbank_transaction WHERE fk_fintsbank_account = ".(int)$id;
-        $db->query($sql);
-        $deleted = $db->affected_rows();
-        $_SESSION['dol_events']['mesgs'][] = sprintf($langs->trans("XTransactionsDeleted"), $deleted);
-        // Redirect to avoid issues with empty data
-        header('Location: '.$_SERVER["PHP_SELF"].'?id='.$id);
-        exit;
-    }
+if ($action == 'deleteall' && $id > 0 && GETPOST('confirm', 'alpha') == 'yes') {
+    $sql = "DELETE FROM ".MAIN_DB_PREFIX."fintsbank_transaction WHERE fk_fintsbank_account = ".(int)$id;
+    $db->query($sql);
+    // Simple redirect without message
+    header('Location: '.dol_buildpath('/fintsbank/transactions.php', 1).'?id='.$id);
+    exit;
 }
 
 // Auto-match all new transactions
