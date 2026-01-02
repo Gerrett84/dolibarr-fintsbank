@@ -29,7 +29,6 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
-require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/bank/class/account.class.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/paiement/class/paiement.class.php';
@@ -38,8 +37,6 @@ require_once DOL_DOCUMENT_ROOT.'/fourn/class/paiementfourn.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once('/fintsbank/class/fintsaccount.class.php');
 dol_include_once('/fintsbank/class/fintstransaction.class.php');
-
-$form = new Form($db);
 
 // Security check
 if (!$user->rights->fintsbank->read) {
@@ -712,20 +709,6 @@ if ($total > $limit) {
 }
 
 // Action buttons
-// Confirmation dialog for delete
-if ($action == 'deleteall' && GETPOST('confirm', 'alpha') != 'yes') {
-    $formconfirm = $form->formconfirm(
-        $_SERVER["PHP_SELF"].'?action=deleteall&id='.$id.'&token='.newToken(),
-        $langs->trans("DeleteAllTransactions"),
-        $langs->trans("ConfirmDeleteAllTransactions"),
-        'deleteall',
-        '',
-        0,
-        1
-    );
-    print $formconfirm;
-}
-
 print '<div class="tabsAction">';
 
 // Auto-match all new transactions
@@ -744,7 +727,9 @@ print '<i class="fas fa-sync"></i> '.$langs->trans("SyncNow");
 print '</a>';
 
 // Delete all transactions (for re-sync)
-print '<a class="butActionDelete" href="'.$_SERVER["PHP_SELF"].'?action=deleteall&id='.$id.'&token='.newToken().'">';
+$deleteUrl = $_SERVER["PHP_SELF"].'?action=deleteall&id='.$id.'&confirm=yes&token='.newToken();
+$confirmMsg = $langs->trans("ConfirmDeleteAllTransactions");
+print '<a class="butActionDelete" href="'.$deleteUrl.'" onclick="return confirm(\''.dol_escape_js($confirmMsg).'\');">';
 print '<i class="fas fa-trash"></i> '.$langs->trans("DeleteAllTransactions");
 print '</a>';
 
