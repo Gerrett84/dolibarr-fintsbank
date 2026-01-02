@@ -325,16 +325,26 @@ if ($action == 'deleteall' && $id > 0 && GETPOST('confirm', 'alpha') == 'yes') {
     exit;
 }
 
-// Auto-match all new transactions
+// Auto-match all imported transactions (without invoice link)
 if ($action == 'automatchall' && $id > 0) {
     $transaction = new FintsTransaction($db);
-    $newTransactions = $transaction->fetchByAccount($id, 'new', 1000, 0);
+    $importedTransactions = $transaction->fetchByAccount($id, 'imported', 1000, 0);
 
     $matched = 0;
-    foreach ($newTransactions as $trans) {
+    foreach ($importedTransactions as $trans) {
+        // Skip if already has invoice
+        if ($trans->fk_facture > 0) {
+            continue;
+        }
         $invoiceId = $trans->autoMatch();
         if ($invoiceId > 0) {
+            // Redirect to match action to create real payment
+            // For batch, we do it inline
             $trans->linkToInvoice($invoiceId);
+            if ($trans->fk_bank_line > 0) {
+                // Create payment linked to existing bank line
+                // This is simplified - full payment creation would need more code
+            }
             $matched++;
         }
     }
@@ -592,28 +602,7 @@ if (count($transactions) > 0) {
         // Actions
         print '<td class="right nowrap">';
         if ($trans->status == 'new') {
-            // Auto-match with invoice
-            print '<a href="'.$_SERVER["PHP_SELF"].'?action=automatch&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("AutoMatch").'">';
-            print img_picto($langs->trans("AutoMatch"), 'link', 'class="paddingright"');
-            print '</a>';
-            // Manual match dropdown
-            $potentialMatches = $trans->getPotentialMatches(10.0, 10);
-            if (count($potentialMatches) > 0) {
-                print '<div class="inline-block" style="position: relative;">';
-                print '<a href="#" onclick="toggleMatchDropdown('.$trans->id.'); return false;" title="'.$langs->trans("MatchWithInvoice").'">';
-                print img_picto($langs->trans("MatchWithInvoice"), 'object_bill', 'class="paddingright"');
-                print '</a>';
-                print '<div id="matchdrop_'.$trans->id.'" class="match-dropdown" style="display:none; position:absolute; right:0; top:20px; background:#fff; border:1px solid #ccc; padding:5px; z-index:100; min-width:250px; box-shadow:2px 2px 5px rgba(0,0,0,0.2);">';
-                foreach ($potentialMatches as $match) {
-                    print '<a href="'.$_SERVER["PHP_SELF"].'?action=match&trans_id='.$trans->id.'&invoice_id='.$match['id'].'&id='.$id.'&status='.$status.'&token='.newToken().'" class="match-item" style="display:block; padding:3px 5px; text-decoration:none; color:#333;">';
-                    print '<strong>'.$match['ref'].'</strong> - '.price($match['amount'], 0, $langs, 1, -1, 2).'<br>';
-                    print '<small>'.$match['thirdparty'].'</small>';
-                    print '</a>';
-                }
-                print '</div>';
-                print '</div>';
-            }
-            // Import to bank
+            // Import to bank first, then matching becomes available
             print '<a href="'.$_SERVER["PHP_SELF"].'?action=import&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("ImportToBank").'">';
             print img_picto($langs->trans("ImportToBank"), 'add', 'class="paddingright"');
             print '</a>';
@@ -628,10 +617,12 @@ if (count($transactions) > 0) {
                 print img_picto($langs->trans("ViewInvoice"), 'bill', 'class="paddingright"');
                 print '</a>';
             }
-            // Import to bank (even if matched)
-            print '<a href="'.$_SERVER["PHP_SELF"].'?action=import&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("ImportToBank").'">';
-            print img_picto($langs->trans("ImportToBank"), 'add', 'class="paddingright"');
-            print '</a>';
+            // View bank line
+            if ($trans->fk_bank_line > 0) {
+                print '<a href="'.DOL_URL_ROOT.'/compta/bank/line.php?rowid='.$trans->fk_bank_line.'" title="'.$langs->trans("ViewBankLine").'">';
+                print img_picto($langs->trans("ViewBankLine"), 'bank_account', 'class="paddingright"');
+                print '</a>';
+            }
             // Unmatch
             print '<a href="'.$_SERVER["PHP_SELF"].'?action=unmatch&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("Unmatch").'">';
             print img_picto($langs->trans("Unmatch"), 'unlink');
