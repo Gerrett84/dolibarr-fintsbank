@@ -29,6 +29,7 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/core/lib/admin.lib.php';
+require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/bank/class/account.class.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
 require_once DOL_DOCUMENT_ROOT.'/compta/paiement/class/paiement.class.php';
@@ -37,6 +38,8 @@ require_once DOL_DOCUMENT_ROOT.'/fourn/class/paiementfourn.class.php';
 require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 dol_include_once('/fintsbank/class/fintsaccount.class.php');
 dol_include_once('/fintsbank/class/fintstransaction.class.php');
+
+$form = new Form($db);
 
 // Security check
 if (!$user->rights->fintsbank->read) {
@@ -313,6 +316,20 @@ if ($action == 'unmatch' && GETPOST('trans_id', 'int')) {
         $sql .= " WHERE rowid = ".(int)$trans->id;
         $db->query($sql);
         setEventMessages($langs->trans("RecordModified"), null, 'mesgs');
+    }
+}
+
+// Delete all transactions for account (for re-sync)
+if ($action == 'deleteall' && $id > 0) {
+    $confirm = GETPOST('confirm', 'alpha');
+    if ($confirm == 'yes') {
+        $sql = "DELETE FROM ".MAIN_DB_PREFIX."fintsbank_transaction WHERE fk_fintsbank_account = ".(int)$id;
+        if ($db->query($sql)) {
+            $deleted = $db->affected_rows();
+            setEventMessages(sprintf($langs->trans("XTransactionsDeleted"), $deleted), null, 'mesgs');
+        } else {
+            setEventMessages($langs->trans("Error"), null, 'errors');
+        }
     }
 }
 
@@ -695,6 +712,20 @@ if ($total > $limit) {
 }
 
 // Action buttons
+// Confirmation dialog for delete
+if ($action == 'deleteall' && GETPOST('confirm', 'alpha') != 'yes') {
+    $formconfirm = $form->formconfirm(
+        $_SERVER["PHP_SELF"].'?action=deleteall&id='.$id.'&token='.newToken(),
+        $langs->trans("DeleteAllTransactions"),
+        $langs->trans("ConfirmDeleteAllTransactions"),
+        'deleteall',
+        '',
+        0,
+        1
+    );
+    print $formconfirm;
+}
+
 print '<div class="tabsAction">';
 
 // Auto-match all new transactions
@@ -710,6 +741,11 @@ print '</a>';
 // Sync
 print '<a class="butAction" href="'.dol_buildpath('/fintsbank/sync.php', 1).'?id='.$id.'">';
 print '<i class="fas fa-sync"></i> '.$langs->trans("SyncNow");
+print '</a>';
+
+// Delete all transactions (for re-sync)
+print '<a class="butActionDelete" href="'.$_SERVER["PHP_SELF"].'?action=deleteall&id='.$id.'&token='.newToken().'">';
+print '<i class="fas fa-trash"></i> '.$langs->trans("DeleteAllTransactions");
 print '</a>';
 
 print '</div>';

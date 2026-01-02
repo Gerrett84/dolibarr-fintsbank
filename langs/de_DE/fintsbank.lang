@@ -71,6 +71,9 @@ Unmatch=Zuordnung aufheben
 
 PaymentCreated=Zahlung erfolgreich erstellt
 ImportedFromFinTS=Importiert von FinTS
+DeleteAllTransactions=Alle Transaktionen loeschen
+ConfirmDeleteAllTransactions=Moechten Sie wirklich alle Transaktionen fuer dieses Konto loeschen? Diese Aktion kann nicht rueckgaengig gemacht werden.
+XTransactionsDeleted=%s Transaktionen geloescht
 
 # Errors
 ErrorInvoiceNotFound=Rechnung nicht gefunden

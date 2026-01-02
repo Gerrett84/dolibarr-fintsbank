@@ -71,6 +71,9 @@ Unmatch=Remove match
 
 PaymentCreated=Payment successfully created
 ImportedFromFinTS=Imported from FinTS
+DeleteAllTransactions=Delete all transactions
+ConfirmDeleteAllTransactions=Are you sure you want to delete all transactions for this account? This action cannot be undone.
+XTransactionsDeleted=%s transactions deleted
 
 # Errors
 ErrorInvoiceNotFound=Invoice not found
