@@ -321,12 +321,9 @@ if ($action == 'deleteall' && $id > 0) {
     $confirm = GETPOST('confirm', 'alpha');
     if ($confirm == 'yes') {
         $sql = "DELETE FROM ".MAIN_DB_PREFIX."fintsbank_transaction WHERE fk_fintsbank_account = ".(int)$id;
-        if ($db->query($sql)) {
-            $deleted = $db->affected_rows();
-            setEventMessages(sprintf($langs->trans("XTransactionsDeleted"), $deleted), null, 'mesgs');
-        } else {
-            setEventMessages($langs->trans("Error"), null, 'errors');
-        }
+        $db->query($sql);
+        $deleted = $db->affected_rows();
+        $_SESSION['dol_events']['mesgs'][] = sprintf($langs->trans("XTransactionsDeleted"), $deleted);
         // Redirect to avoid issues with empty data
         header('Location: '.$_SERVER["PHP_SELF"].'?id='.$id);
         exit;
