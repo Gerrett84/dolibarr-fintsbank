@@ -327,6 +327,9 @@ if ($action == 'deleteall' && $id > 0) {
         } else {
             setEventMessages($langs->trans("Error"), null, 'errors');
         }
+        // Redirect to avoid issues with empty data
+        header('Location: '.$_SERVER["PHP_SELF"].'?id='.$id);
+        exit;
     }
 }
 
