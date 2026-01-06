@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 1.0.0** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 1.1.0** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -187,14 +187,20 @@ Bei der Zuordnung wird automatisch:
 
 ## Changelog
 
-### v1.0.0 (2026-01-06)
+### v1.1.0 (2026-01-06)
+- Fix: Commerzbank FinTS-URL korrigiert
+- Hinweis: Installation auf eigene Verantwortung
+- Hinweis: Nur photoTAN wird unterstuetzt
+- Rechnungszuordnung (Kunden- und Lieferantenrechnungen)
+- Zahlungserstellung bei Rechnungszuordnung
+- Korrekte Vorzeichen (Einnahmen positiv, Ausgaben negativ)
+
+### v1.0.0 (2026-01-01)
 - Erster stabiler Release
 - FinTS/HBCI Kontoabruf mit photoTAN
 - Transaktions-Import ins Dolibarr-Bankkonto
 - Massen-Import aller neuen Transaktionen
 - Ignorieren/Wiederherstellen von Transaktionen
-- Rechnungszuordnung (Kunden- und Lieferantenrechnungen)
-- Zahlungserstellung bei Rechnungszuordnung
 - Deutsche und englische Sprachunterstuetzung
 
 ---
