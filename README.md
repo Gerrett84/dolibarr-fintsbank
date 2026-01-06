@@ -1,10 +1,14 @@
 # Dolibarr FinTS Bank Module
 
-**Version 1.1.0** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 1.0.0** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
 [![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)](https://www.php.net)
+
+> ⚠️ **Hinweis:** Die Installation und Nutzung dieses Moduls erfolgt auf eigene Verantwortung. Es wird empfohlen, vor der Installation ein Backup der Datenbank und des Dolibarr-Verzeichnisses zu erstellen.
+
+> ℹ️ **TAN-Verfahren:** Dieses Modul unterstützt derzeit nur **photoTAN**. Andere TAN-Verfahren (pushTAN, chipTAN, etc.) werden aktuell nicht unterstützt.
 
 ---
 
@@ -12,7 +16,7 @@
 
 ### Kontoabruf per FinTS
 - **Automatischer Abruf** - Kontoauszuege direkt von der Bank abrufen
-- **TAN-Unterstuetzung** - photoTAN, pushTAN, chipTAN
+- **TAN-Unterstuetzung** - photoTAN
 - **Mehrere Konten** - Beliebig viele Bankverbindungen verwalten
 - **Korrekte Vorzeichen** - Einnahmen positiv, Ausgaben negativ
 
@@ -96,7 +100,7 @@ chown -R www-data:www-data /var/www/dolibarr/htdocs/custom/fintsbank
 
 | Bank | FinTS-URL |
 |------|-----------|
-| Commerzbank | `https://fints.commerzbank.com/fints30` |
+| Commerzbank | `https://fints.commerzbank.de/fints` |
 | Sparkassen | `https://banking-[blz].s-fints-pt-[region].de/fints30` |
 | Volksbank | Je nach Institut unterschiedlich |
 | Postbank | `https://hbci.postbank.de/banking/hbci` |
@@ -183,23 +187,14 @@ Bei der Zuordnung wird automatisch:
 
 ## Changelog
 
-### v1.1.0 (2026-01-02)
-- **Rechnungszuordnung** - Transaktionen mit Rechnungen verknuepfen
-- **Zahlungserstellung** - Echte Dolibarr-Zahlungen werden erstellt
-- **Kunden/Lieferanten** - Automatische Verknuepfung bei Zuordnung
-- **Lieferantenrechnungen** - Unterstuetzung fuer Ausgaben
-- **Korrekte Vorzeichen** - Einnahmen positiv, Ausgaben negativ
-- **Workflow verbessert** - Erst Import, dann Zuordnung
-- **Transaktionen loeschen** - Fuer erneuten Sync
-- **Debug-Code entfernt** - Sauberer Produktionscode
-
-### v1.0.0 (2026-01-01)
+### v1.0.0 (2026-01-06)
 - Erster stabiler Release
-- FinTS/HBCI Kontoabruf mit TAN-Unterstuetzung
-- photoTAN/pushTAN Integration
+- FinTS/HBCI Kontoabruf mit photoTAN
 - Transaktions-Import ins Dolibarr-Bankkonto
 - Massen-Import aller neuen Transaktionen
 - Ignorieren/Wiederherstellen von Transaktionen
+- Rechnungszuordnung (Kunden- und Lieferantenrechnungen)
+- Zahlungserstellung bei Rechnungszuordnung
 - Deutsche und englische Sprachunterstuetzung
 
 ---

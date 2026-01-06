@@ -205,7 +205,7 @@ if ($action == 'create' || $action == 'edit') {
     // FinTS URL
     print '<tr class="oddeven">';
     print '<td class="fieldrequired">'.$langs->trans("FintsUrl").'</td>';
-    print '<td><input type="text" name="fints_url" value="'.dol_escape_htmltag($fintsaccount->fints_url).'" size="60" placeholder="https://fints.commerzbank.com/PinTanCgi"></td>';
+    print '<td><input type="text" name="fints_url" value="'.dol_escape_htmltag($fintsaccount->fints_url).'" size="60" placeholder="https://fints.commerzbank.de/fints"></td>';
     print '</tr>';
 
     // Username

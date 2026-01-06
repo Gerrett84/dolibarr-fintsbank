@@ -110,9 +110,9 @@ class FintsAccount extends CommonObject
      */
     public static $bankUrls = array(
         '12030000' => array('name' => 'Deutsche Kreditbank (DKB)', 'url' => 'https://banking-dkb.s-fints-pt-dkb.de/fints30'),
-        '20041111' => array('name' => 'Commerzbank', 'url' => 'https://fints.commerzbank.com/PinTanCgi'),
-        '37040044' => array('name' => 'Commerzbank', 'url' => 'https://fints.commerzbank.com/PinTanCgi'),
-        '50040000' => array('name' => 'Commerzbank', 'url' => 'https://fints.commerzbank.com/PinTanCgi'),
+        '20041111' => array('name' => 'Commerzbank', 'url' => 'https://fints.commerzbank.de/fints'),
+        '37040044' => array('name' => 'Commerzbank', 'url' => 'https://fints.commerzbank.de/fints'),
+        '50040000' => array('name' => 'Commerzbank', 'url' => 'https://fints.commerzbank.de/fints'),
         '67280051' => array('name' => 'Volksbank', 'url' => 'https://fints.gad.de/fints'),
         // Add more banks as needed
     );
