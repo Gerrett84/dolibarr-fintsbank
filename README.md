@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 1.1.0** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 1.2.0** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -36,12 +36,17 @@
 - **Bank-Verknuepfung** - Direkter Link zur Dolibarr-Bankbuchung
 - **Transaktionen loeschen** - Fuer erneuten Sync
 
-### Rechnungszuordnung (NEU in v1.1)
+### Rechnungszuordnung
 - **Automatische Zuordnung** - Rechnungen anhand Betrag und Referenz finden
 - **Manuelle Zuordnung** - Dropdown mit passenden Rechnungen
 - **Zahlungserstellung** - Echte Dolibarr-Zahlung wird erstellt
 - **Kunden/Lieferanten-Verknuepfung** - Drittpartei wird automatisch zugeordnet
 - **Kunden- und Lieferantenrechnungen** - Beide werden unterstuetzt
+
+### Auto-Bankabgleich (NEU in v1.2)
+- **Automatischer Abgleich** - Importierte Transaktionen werden automatisch als abgeglichen markiert
+- **Kein Kontoauszug noetig** - Kein manueller Upload von Bankauszuegen erforderlich
+- **Konfigurierbar** - Ein-/Ausschaltbar in den Modul-Einstellungen
 
 ---
 
@@ -186,6 +191,11 @@ Bei der Zuordnung wird automatisch:
 ---
 
 ## Changelog
+
+### v1.2.0 (2026-01-28)
+- **Auto-Bankabgleich** - Importierte Transaktionen automatisch als abgeglichen markieren
+- **Einstellungen-Tab** - Neuer Tab fuer Modul-Einstellungen im Admin-Bereich
+- Kein manueller Kontoauszugs-Upload mehr erforderlich
 
 ### v1.1.0 (2026-01-06)
 - Fix: Commerzbank FinTS-URL korrigiert
