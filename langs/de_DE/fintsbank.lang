@@ -100,3 +100,8 @@ ViewTransactions=Transaktionen anzeigen
 Retry=Erneut versuchen
 Confirm=Bestaetigen
 All=Alle
+
+# Settings
+Settings=Einstellungen
+AutoReconcileOnImport=Automatischer Bankabgleich beim Import
+AutoReconcileOnImportHelp=Wenn aktiviert, werden importierte Transaktionen automatisch als abgeglichen markiert. Es wird kein manueller Kontoauszugs-Upload benoetigt.

@@ -100,3 +100,8 @@ ViewTransactions=View transactions
 Retry=Retry
 Confirm=Confirm
 All=All
+
+# Settings
+Settings=Settings
+AutoReconcileOnImport=Auto-reconcile on import
+AutoReconcileOnImportHelp=When enabled, imported transactions will automatically be marked as reconciled. No manual bank statement upload is required.

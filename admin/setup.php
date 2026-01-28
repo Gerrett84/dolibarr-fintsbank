@@ -49,6 +49,17 @@ $confirm = GETPOST('confirm', 'alpha');
  * Actions
  */
 
+// Save global settings
+if ($action == 'update_settings') {
+    $autoReconcile = GETPOST('FINTSBANK_AUTO_RECONCILE', 'int');
+
+    dolibarr_set_const($db, 'FINTSBANK_AUTO_RECONCILE', $autoReconcile, 'chaine', 0, '', $conf->entity);
+
+    setEventMessages($langs->trans("SetupSaved"), null, 'mesgs');
+    header("Location: ".$_SERVER["PHP_SELF"]."?tab=settings");
+    exit;
+}
+
 // Add new connection
 if ($action == 'add') {
     $fintsaccount = new FintsAccount($db);
@@ -132,8 +143,13 @@ $head[$h][0] = dol_buildpath('/fintsbank/admin/setup.php', 1);
 $head[$h][1] = $langs->trans('BankConnections');
 $head[$h][2] = 'connections';
 $h++;
+$head[$h][0] = dol_buildpath('/fintsbank/admin/setup.php', 1).'?tab=settings';
+$head[$h][1] = $langs->trans('Settings');
+$head[$h][2] = 'settings';
+$h++;
 
-print dol_get_fiche_head($head, 'connections', '', -1, 'fa-university');
+$tab = GETPOST('tab', 'aZ09') ? GETPOST('tab', 'aZ09') : 'connections';
+print dol_get_fiche_head($head, $tab, '', -1, 'fa-university');
 
 // Check if php-fints is installed
 $fintsInstalled = file_exists(dol_buildpath('/fintsbank/vendor/autoload.php', 0));
@@ -259,7 +275,7 @@ if ($action == 'create' || $action == 'edit') {
 
     print '</form>';
 
-} else {
+} elseif ($tab == 'connections' || empty($tab)) {
     // List existing connections
     print '<div class="div-table-responsive-no-min">';
     print '<table class="noborder centpercent">';
@@ -326,6 +342,38 @@ if ($action == 'create' || $action == 'edit') {
     }
     print '</table>';
     print '</div>';
+
+} elseif ($tab == 'settings') {
+    // Global settings tab
+    print '<form method="POST" action="'.$_SERVER["PHP_SELF"].'">';
+    print '<input type="hidden" name="token" value="'.newToken().'">';
+    print '<input type="hidden" name="action" value="update_settings">';
+    print '<input type="hidden" name="tab" value="settings">';
+
+    print '<table class="noborder centpercent">';
+    print '<tr class="liste_titre">';
+    print '<td>'.$langs->trans("Parameter").'</td>';
+    print '<td>'.$langs->trans("Value").'</td>';
+    print '</tr>';
+
+    // Auto-reconcile option
+    print '<tr class="oddeven">';
+    print '<td class="titlefield">';
+    print $langs->trans("AutoReconcileOnImport");
+    print '<br><span class="small opacitymedium">'.$langs->trans("AutoReconcileOnImportHelp").'</span>';
+    print '</td>';
+    print '<td>';
+    print '<input type="checkbox" name="FINTSBANK_AUTO_RECONCILE" value="1"'.(getDolGlobalInt('FINTSBANK_AUTO_RECONCILE') ? ' checked' : '').'>';
+    print '</td>';
+    print '</tr>';
+
+    print '</table>';
+
+    print '<div class="center" style="margin-top: 10px;">';
+    print '<input type="submit" class="button button-save" value="'.$langs->trans("Save").'">';
+    print '</div>';
+
+    print '</form>';
 }
 
 print dol_get_fiche_end();

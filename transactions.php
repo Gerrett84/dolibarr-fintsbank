@@ -99,6 +99,13 @@ if ($action == 'import' && GETPOST('trans_id', 'int')) {
                     $paymentType = 'LIQ'; // Liquide/Cash
                 }
 
+                // Generate statement number for auto-reconciliation (FINTS-YYYY-MM-DD)
+                $statementNum = '';
+                $autoReconcile = getDolGlobalInt('FINTSBANK_AUTO_RECONCILE');
+                if ($autoReconcile) {
+                    $statementNum = 'FINTS-'.dol_print_date($trans->booking_date, '%Y-%m-%d');
+                }
+
                 // Add bank line
                 $bankLineId = $bankAccount->addline(
                     $trans->booking_date,           // Date
@@ -111,10 +118,17 @@ if ($action == 'import' && GETPOST('trans_id', 'int')) {
                     $trans->name,                   // Emetteur (sender)
                     '',                             // Bank name
                     '',                             // Account number
-                    $trans->value_date              // Value date
+                    $trans->value_date,             // Value date
+                    $statementNum                   // Statement number (num_releve)
                 );
 
                 if ($bankLineId > 0) {
+                    // Auto-reconcile if enabled
+                    if ($autoReconcile && !empty($statementNum)) {
+                        $sql = "UPDATE ".MAIN_DB_PREFIX."bank SET rappro = 1 WHERE rowid = ".(int)$bankLineId;
+                        $db->query($sql);
+                    }
+
                     // Link transaction to bank line
                     $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction";
                     $sql .= " SET fk_bank_line = ".(int)$bankLineId;
@@ -368,6 +382,9 @@ if ($action == 'importall' && $id > 0) {
             $imported = 0;
             $errors = 0;
 
+            // Check if auto-reconcile is enabled
+            $autoReconcile = getDolGlobalInt('FINTSBANK_AUTO_RECONCILE');
+
             foreach ($newTransactions as $trans) {
                 // Map booking text to valid payment type code
                 $paymentType = 'VIR'; // Default: Virement/Transfer
@@ -380,6 +397,12 @@ if ($action == 'importall' && $id > 0) {
                     $paymentType = 'LIQ';
                 }
 
+                // Generate statement number for auto-reconciliation
+                $statementNum = '';
+                if ($autoReconcile) {
+                    $statementNum = 'FINTS-'.dol_print_date($trans->booking_date, '%Y-%m-%d');
+                }
+
                 $bankLineId = $bankAccount->addline(
                     $trans->booking_date,
                     $paymentType,
@@ -388,10 +411,17 @@ if ($action == 'importall' && $id > 0) {
                     '', '', $user,
                     $trans->name,
                     '', '',
-                    $trans->value_date
+                    $trans->value_date,
+                    $statementNum  // Statement number for reconciliation
                 );
 
                 if ($bankLineId > 0) {
+                    // Auto-reconcile if enabled
+                    if ($autoReconcile && !empty($statementNum)) {
+                        $sql = "UPDATE ".MAIN_DB_PREFIX."bank SET rappro = 1 WHERE rowid = ".(int)$bankLineId;
+                        $db->query($sql);
+                    }
+
                     $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction";
                     $sql .= " SET fk_bank_line = ".(int)$bankLineId;
                     $sql .= ", status = 'imported'";
