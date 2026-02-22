@@ -76,6 +76,9 @@ class modFintsBank extends DolibarrModules
         // Constants
         $this->const = array();
 
+        // Config page - accessible via module setup gear icon
+        $this->config_page_url = array("setup.php@fintsbank");
+
         // Boxes/Widgets
         $this->boxes = array();
 
@@ -125,21 +128,19 @@ class modFintsBank extends DolibarrModules
             'user' => 0,
         );
 
-        // Admin menu
+        // Admin menu - only visible when in Home > Setup area
         $r++;
         $this->menu[$r] = array(
             'fk_menu' => 'fk_mainmenu=home,fk_leftmenu=setup',
             'type' => 'left',
-            'titre' => 'FinTS Bank',
-            'mainmenu' => 'home',
-            'leftmenu' => 'fintsbank_admin',
-            'url' => '/custom/fintsbank/admin/setup.php',
+            'titre' => 'FintsBankSetup',
+            'url' => '/custom/fintsbank/admin/setup.php?mainmenu=home&leftmenu=setup',
             'langs' => 'fintsbank@fintsbank',
-            'position' => 1100,
-            'enabled' => '$conf->fintsbank->enabled',
+            'position' => 450,
+            'enabled' => 'isModEnabled("fintsbank") && preg_match(\'/^(setup|all)/\', $leftmenu)',
             'perms' => '$user->admin',
             'target' => '',
-            'user' => 2,
+            'user' => 0,
         );
     }
 
