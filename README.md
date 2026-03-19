@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 1.2.1** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 1.2.2** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -191,6 +191,10 @@ Bei der Zuordnung wird automatisch:
 ---
 
 ## Changelog
+
+### v1.2.2 (2026-03-19)
+
+- **Fix: Menu not visible in Dolibarr v23** – `$conf->fintsbank->enabled` replaced with `isModEnabled("fintsbank")` for compatibility with Dolibarr v23+. Fully backwards compatible with v22 and earlier.
 
 ### v1.2.1 (2026-02-23)
 - **Menu-Fix** - Admin-Menü erscheint nur noch unter Home > Einstellungen
