@@ -122,7 +122,7 @@ class modFintsBank extends DolibarrModules
             'url' => '/custom/fintsbank/transactions.php',
             'langs' => 'fintsbank@fintsbank',
             'position' => 100,
-            'enabled' => '$conf->fintsbank->enabled',
+            'enabled' => 'isModEnabled("fintsbank")',
             'perms' => '$user->rights->fintsbank->read',
             'target' => '',
             'user' => 0,

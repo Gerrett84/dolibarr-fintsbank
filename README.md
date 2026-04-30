@@ -209,6 +209,9 @@ Bei der Zuordnung wird automatisch:
 - **Warnung bei Ueberschreitung** - Visueller Hinweis wenn Betrag den Rechnungsrest ueberschreitet
 - **DB-Migration** - Neue Tabelle llx_fintsbank_transaction_invoice fuer Mehrfachzuordnungen
 
+### v1.2.2 (2026-03-19)
+- **Fix: Menu not visible in Dolibarr v23** – `$conf->fintsbank->enabled` replaced with `isModEnabled("fintsbank")` for compatibility with Dolibarr v23+. Fully backwards compatible with v22 and earlier.
+
 ### v1.2.1 (2026-02-23)
 - **Menu-Fix** - Admin-Menü erscheint nur noch unter Home > Einstellungen
 - Zahnrad-Icon in Modulliste für direkten Zugriff auf Einstellungen
