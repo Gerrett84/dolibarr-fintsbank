@@ -105,3 +105,19 @@ All=Alle
 Settings=Einstellungen
 AutoReconcileOnImport=Automatischer Bankabgleich beim Import
 AutoReconcileOnImportHelp=Wenn aktiviert, werden importierte Transaktionen automatisch als abgeglichen markiert. Es wird kein manueller Kontoauszugs-Upload benoetigt.
+
+# Split matching
+SplitTransaction=Manuell zuordnen
+SplitAdd=Rechnung hinzufuegen
+SplitRemove=Entfernen
+SplitAssigned=Zugeordnet
+SplitRemaining=Nicht zugeordnet
+SplitAssign=Zuordnen
+SplitCancel=Abbrechen
+SplitSearchPlaceholder=Rechnungsnr. oder Kunde...
+SplitSearch=Suchen
+SplitNoResults=Keine Rechnungen gefunden
+SplitAmountMismatch=Zugeordneter Betrag darf den Transaktionsbetrag nicht ueberschreiten
+SplitMinTwoInvoices=Mindestens eine Rechnung muss hinzugefuegt werden
+SplitPaymentsCreated=Zahlungen erfolgreich erstellt
+ErrorInvalidSplitData=Ungueltige Aufteilungsdaten

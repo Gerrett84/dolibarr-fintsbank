@@ -320,13 +320,141 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
 if ($action == 'unmatch' && GETPOST('trans_id', 'int')) {
     $trans = new FintsTransaction($db);
     if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        // Clear any split assignments too
+        $trans->clearInvoiceAssignments();
         // Keep imported status if already imported, otherwise set to new
-        $newStatus = ($trans->status == 'imported') ? 'imported' : 'new';
+        $newStatus = ($trans->status == 'imported' || $trans->status == 'matched') ? 'imported' : 'new';
         $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction";
         $sql .= " SET fk_facture = NULL, fk_societe = NULL, status = '".$newStatus."'";
         $sql .= " WHERE rowid = ".(int)$trans->id;
         $db->query($sql);
         setEventMessages($langs->trans("RecordModified"), null, 'mesgs');
+    }
+}
+
+// Split match: assign transaction to multiple invoices with individual amounts
+if ($action == 'splitmatch' && GETPOST('trans_id', 'int')) {
+    $trans = new FintsTransaction($db);
+    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        $splitDataRaw = GETPOST('split_data', 'none');
+        $splitData = json_decode($splitDataRaw, true);
+
+        if (!is_array($splitData) || count($splitData) == 0) {
+            setEventMessages($langs->trans("ErrorInvalidSplitData"), null, 'errors');
+        } else {
+            $error = 0;
+            $db->begin();
+
+            // Clear existing split assignments
+            $trans->clearInvoiceAssignments();
+
+            $firstSocid = 0;
+            $firstFkFacture = 0;
+            $seenSocids = array();
+
+            foreach ($splitData as $split) {
+                $invoiceId   = (int)$split['invoice_id'];
+                $splitAmount = (float)$split['amount'];
+                $entryType   = (isset($split['invoice_type']) && $split['invoice_type'] === 'supplier') ? 'supplier' : 'customer';
+
+                if ($invoiceId <= 0 || $splitAmount <= 0) {
+                    continue;
+                }
+
+                if ($entryType === 'supplier') {
+                    $facture = new FactureFournisseur($db);
+                } else {
+                    $facture = new Facture($db);
+                }
+
+                if ($facture->fetch($invoiceId) <= 0) {
+                    $error++;
+                    setEventMessages($langs->trans("ErrorInvoiceNotFound"), null, 'errors');
+                    break;
+                }
+                $facture->fetch_thirdparty();
+
+                if ($entryType === 'supplier') {
+                    $paiement = new PaiementFourn($db);
+                } else {
+                    $paiement = new Paiement($db);
+                }
+                $paiement->datepaye              = $trans->booking_date;
+                $paiement->amounts               = array($invoiceId => $splitAmount);
+                $paiement->multicurrency_amounts = array($invoiceId => $splitAmount);
+                $paiement->multicurrency_code    = array($invoiceId => $trans->currency);
+                $paiement->multicurrency_tx      = array($invoiceId => 1);
+                $paiement->paiementid            = dol_getIdFromCode($db, 'VIR', 'c_paiement', 'code', 'id', 1);
+                $paiement->num_payment           = $trans->end_to_end_id ?: $trans->transaction_id;
+                $paiement->note_private          = $langs->trans("ImportedFromFinTS").' - '.$trans->description;
+
+                $paiement_id = $paiement->create($user, 1, $facture->thirdparty);
+                if ($paiement_id > 0) {
+                    if ($trans->fk_bank_line > 0) {
+                        if ($entryType === 'supplier') {
+                            $sql = "UPDATE ".MAIN_DB_PREFIX."paiementfourn SET fk_bank = ".(int)$trans->fk_bank_line." WHERE rowid = ".(int)$paiement_id;
+                            $db->query($sql);
+                            $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type) VALUES (".(int)$trans->fk_bank_line.", ".(int)$paiement_id.", '/fourn/paiement/card.php?id=".$paiement_id."', '(SupplierPayment)', 'payment_supplier')";
+                            $db->query($sql);
+                        } else {
+                            $sql = "UPDATE ".MAIN_DB_PREFIX."paiement SET fk_bank = ".(int)$trans->fk_bank_line." WHERE rowid = ".(int)$paiement_id;
+                            $db->query($sql);
+                            $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type) VALUES (".(int)$trans->fk_bank_line.", ".(int)$paiement_id.", '/compta/paiement/card.php?id=".$paiement_id."', '(Payment)', 'payment')";
+                            $db->query($sql);
+                        }
+                        if ($facture->socid > 0 && !in_array($facture->socid, $seenSocids)) {
+                            $sql = "INSERT INTO ".MAIN_DB_PREFIX."bank_url (fk_bank, url_id, url, label, type)";
+                            $sql .= " VALUES (".(int)$trans->fk_bank_line.", ".(int)$facture->socid;
+                            $sql .= ", '/societe/card.php?socid=".$facture->socid."'";
+                            $sql .= ", '".$db->escape($facture->thirdparty->name)."', 'company')";
+                            $db->query($sql);
+                            $seenSocids[] = $facture->socid;
+                        }
+                    } else {
+                        $fintsAccount = new FintsAccount($db);
+                        if ($fintsAccount->fetch($trans->fk_fintsbank_account) > 0 && $fintsAccount->fk_bank > 0) {
+                            $payLabel = $entryType === 'supplier' ? 'payment_supplier' : 'payment';
+                            $payNote  = $entryType === 'supplier' ? '(SupplierInvoicePayment)' : '(CustomerInvoicePayment)';
+                            $bank_line_id = $paiement->addPaymentToBank($user, $payLabel, $payNote, $fintsAccount->fk_bank, $trans->name, '');
+                            if ($bank_line_id > 0) {
+                                $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction SET fk_bank_line = ".(int)$bank_line_id.", status = 'imported' WHERE rowid = ".(int)$trans->id;
+                                $db->query($sql);
+                                $trans->fk_bank_line = $bank_line_id;
+                            }
+                        }
+                    }
+
+                    $sql = "INSERT INTO ".MAIN_DB_PREFIX."fintsbank_transaction_invoice (fk_transaction, fk_facture, invoice_type, amount, fk_paiement, entity)";
+                    $sql .= " VALUES (".(int)$trans->id.", ".(int)$invoiceId.", '".$entryType."', ".(float)$splitAmount.", ".(int)$paiement_id.", ".(int)$conf->entity.")";
+                    $db->query($sql);
+
+                    if (!$firstSocid && $facture->socid > 0) {
+                        $firstSocid = $facture->socid;
+                    }
+                    if (!$firstFkFacture) {
+                        $firstFkFacture = $invoiceId;
+                    }
+                } else {
+                    $error++;
+                    setEventMessages($paiement->error, $paiement->errors, 'errors');
+                    break;
+                }
+            }
+
+            if (!$error) {
+                $sql = "UPDATE ".MAIN_DB_PREFIX."fintsbank_transaction";
+                $sql .= " SET status = 'matched', fk_facture = ".(int)$firstFkFacture;
+                if ($firstSocid) {
+                    $sql .= ", fk_societe = ".(int)$firstSocid;
+                }
+                $sql .= ", date_match = '".$db->idate(dol_now())."' WHERE rowid = ".(int)$trans->id;
+                $db->query($sql);
+                $db->commit();
+                setEventMessages($langs->trans("SplitPaymentsCreated"), null, 'mesgs');
+            } else {
+                $db->rollback();
+            }
+        }
     }
 }
 
@@ -453,30 +581,203 @@ if ($action == 'importall' && $id > 0) {
 $page_name = "Transactions";
 llxHeader('', $langs->trans($page_name));
 
-// JavaScript for match dropdown
+// JavaScript for match dropdown and split panel
+$ajaxUrl = dol_buildpath('/fintsbank/ajax/invoice_search.php', 1);
+$tokenVal = newToken();
 print '<script>
+var splitState = {};
+var splitSearchResults = {};
+
 function toggleMatchDropdown(id) {
-    // Close all other dropdowns
     document.querySelectorAll(".match-dropdown").forEach(function(el) {
-        if (el.id !== "matchdrop_" + id) {
-            el.style.display = "none";
-        }
+        if (el.id !== "matchdrop_" + id) el.style.display = "none";
     });
-    // Toggle this dropdown
     var dropdown = document.getElementById("matchdrop_" + id);
     dropdown.style.display = dropdown.style.display === "none" ? "block" : "none";
 }
-// Close dropdown when clicking outside
 document.addEventListener("click", function(e) {
-    if (!e.target.closest(".inline-block")) {
-        document.querySelectorAll(".match-dropdown").forEach(function(el) {
-            el.style.display = "none";
-        });
+    if (!e.target.closest(".inline-block") && !e.target.closest(".split-panel")) {
+        document.querySelectorAll(".match-dropdown").forEach(function(el) { el.style.display = "none"; });
     }
 });
+
+function openSplitPanel(transId) {
+    var row = document.getElementById("splitrow_" + transId);
+    if (!row) return;
+    var visible = row.style.display !== "none";
+    // Close all others first
+    document.querySelectorAll(".splitrow").forEach(function(r) { r.style.display = "none"; });
+    if (!visible) {
+        row.style.display = "";
+        if (!splitState[transId]) {
+            var panel = document.getElementById("splitpanel_" + transId);
+            splitState[transId] = [];
+            renderSplitEntries(transId);
+        }
+    }
+}
+
+function searchSplitInvoices(transId) {
+    var input = document.getElementById("splitsearch_" + transId);
+    var query = input ? input.value.trim() : "";
+    if (query.length < 1) return;
+    var resultsDiv = document.getElementById("splitresults_" + transId);
+    resultsDiv.innerHTML = "...";
+    resultsDiv.style.display = "block";
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "'.addslashes($ajaxUrl).'?query=" + encodeURIComponent(query) + "&trans_id=" + transId + "&token='.addslashes($tokenVal).'", true);
+    xhr.onload = function() {
+        if (xhr.status == 200) {
+            try {
+                var results = JSON.parse(xhr.responseText);
+                renderSplitResults(transId, results);
+            } catch(e) {
+                resultsDiv.innerHTML = "<em>Fehler</em>";
+            }
+        }
+    };
+    xhr.send();
+}
+
+function addSplitEntryFromSearch(transId, idx) {
+    var r = splitSearchResults[transId] && splitSearchResults[transId][idx];
+    if (!r) return;
+    var remaining = (r.amount_remaining !== undefined) ? parseFloat(r.amount_remaining) : parseFloat(r.amount);
+    addSplitEntry(transId, r.id, r.ref, r.thirdparty || "", parseFloat(r.amount), r.type, remaining);
+}
+
+function renderSplitResults(transId, results) {
+    splitSearchResults[transId] = results;
+    var resultsDiv = document.getElementById("splitresults_" + transId);
+    if (!results || results.length === 0) {
+        resultsDiv.innerHTML = "<em style=\"color:#888;\">Keine Rechnungen gefunden</em>";
+        return;
+    }
+    var html = "";
+    results.forEach(function(r, idx) {
+        var total = parseFloat(r.amount).toFixed(2).replace(".", ",");
+        var rem   = (r.amount_remaining !== undefined) ? parseFloat(r.amount_remaining) : parseFloat(r.amount);
+        var remFmt = rem.toFixed(2).replace(".", ",");
+        var partialNote = (rem < parseFloat(r.amount) - 0.01) ? " <small style=\"color:#e67e22;\">(noch offen: " + remFmt + " &euro;)</small>" : "";
+        var typeLabel = r.type === "supplier"
+            ? "<span style=\"background:#f0ad4e;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-right:4px;\">Lieferant</span>"
+            : "<span style=\"background:#5bc0de;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-right:4px;\">Kunde</span>";
+        html += "<div class=\"split-result-item\" onclick=\"addSplitEntryFromSearch(" + transId + "," + idx + ")\" style=\"padding:4px 6px; cursor:pointer; border-bottom:1px solid #eee;\">";
+        html += typeLabel + "<strong>" + escHtml(r.ref) + "</strong> &mdash; " + escHtml(r.thirdparty || "") + " &mdash; " + total + " &euro;" + partialNote;
+        html += "</div>";
+    });
+    resultsDiv.innerHTML = html;
+}
+
+function escHtml(s) {
+    var d = document.createElement("div");
+    d.appendChild(document.createTextNode(s || ""));
+    return d.innerHTML;
+}
+
+function addSplitEntry(transId, invoiceId, ref, thirdparty, invoiceAmount, invoiceType, invoiceRemaining) {
+    if (!splitState[transId]) splitState[transId] = [];
+    // Prevent duplicate invoice
+    for (var i = 0; i < splitState[transId].length; i++) {
+        if (splitState[transId][i].invoice_id == invoiceId) return;
+    }
+    var panel = document.getElementById("splitpanel_" + transId);
+    var transAmount = Math.abs(parseFloat(panel.dataset.transAmount));
+    var assigned = splitState[transId].reduce(function(s, e) { return s + parseFloat(e.amount); }, 0);
+    var transRemaining = Math.round((transAmount - assigned) * 100) / 100;
+    // Default amount based on invoice total (not remaining) to avoid 0-amount edge cases
+    var defaultAmt = Math.min(invoiceAmount, transRemaining > 0 ? transRemaining : invoiceAmount);
+    if (defaultAmt <= 0) defaultAmt = transRemaining > 0 ? transRemaining : invoiceAmount;
+    var invRem = (invoiceRemaining !== undefined && invoiceRemaining > 0) ? invoiceRemaining : invoiceAmount;
+    splitState[transId].push({ invoice_id: invoiceId, ref: ref, thirdparty: thirdparty, invoice_amount: invoiceAmount, invoice_remaining: invRem, amount: defaultAmt, invoice_type: invoiceType || "customer" });
+    // Clear search
+    var input = document.getElementById("splitsearch_" + transId);
+    if (input) input.value = "";
+    document.getElementById("splitresults_" + transId).style.display = "none";
+    renderSplitEntries(transId);
+}
+
+function removeSplitEntry(transId, idx) {
+    if (splitState[transId]) splitState[transId].splice(idx, 1);
+    renderSplitEntries(transId);
+}
+
+function renderSplitEntries(transId) {
+    var panel = document.getElementById("splitpanel_" + transId);
+    var transAmount = Math.abs(parseFloat(panel.dataset.transAmount));
+    var listDiv = document.getElementById("splitlist_" + transId);
+    var entries = splitState[transId] || [];
+
+    if (entries.length === 0) {
+        listDiv.innerHTML = "<em style=\"color:#888;\">Noch keine Rechnungen hinzugefuegt.</em>";
+    } else {
+        var html = "<table style=\"width:100%; border-collapse:collapse; margin-top:6px;\">";
+        html += "<tr style=\"background:#f0f0f0;\"><th style=\"text-align:left;padding:3px 6px;\">Rechnung</th><th style=\"text-align:left;padding:3px 6px;\">Kunde</th><th style=\"text-align:right;padding:3px 6px;\">Betrag (&euro;)</th><th></th></tr>";
+        entries.forEach(function(e, idx) {
+            var typeLabel = e.invoice_type === "supplier" ? "<span style=\"background:#f0ad4e;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;\">Lieferant</span>" : "<span style=\"background:#5bc0de;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;\">Kunde</span>";
+            var amt = parseFloat(e.amount || 0);
+            var invRem = parseFloat(e.invoice_remaining !== undefined ? e.invoice_remaining : e.invoice_amount);
+            var overLimit = amt > invRem + 0.01;
+            var rowStyle = overLimit ? "border-bottom:1px solid #ddd; background:#fff3cd;" : "border-bottom:1px solid #ddd;";
+            var warning = overLimit ? " <span title=\"Betrag ueberschreitet offenen Rechnungsbetrag (" + invRem.toFixed(2).replace(".",",") + " €)\" style=\"color:#e67e22; cursor:help;\">&#9888;</span>" : "";
+            html += "<tr style=\"" + rowStyle + "\">";
+            html += "<td style=\"padding:3px 6px;\">" + typeLabel + " " + escHtml(e.ref) + warning + "</td>";
+            html += "<td style=\"padding:3px 6px;\">" + escHtml(e.thirdparty) + "</td>";
+            html += "<td style=\"padding:3px 6px; text-align:right;\"><input type=\"number\" step=\"0.01\" min=\"0.01\" value=\"" + amt.toFixed(2) + "\" style=\"width:90px; text-align:right;" + (overLimit ? " border-color:#e67e22;" : "") + "\" onchange=\"updateSplitAmount(" + transId + "," + idx + ",this.value)\"></td>";
+            html += "<td style=\"padding:3px 6px;\"><a href=\"#\" onclick=\"removeSplitEntry(" + transId + "," + idx + ");return false;\" style=\"color:red;\">&#x2715;</a></td>";
+            html += "</tr>";
+        });
+        html += "</table>";
+        listDiv.innerHTML = html;
+    }
+
+    updateSplitTotals(transId);
+}
+
+function updateSplitAmount(transId, idx, val) {
+    if (splitState[transId] && splitState[transId][idx]) {
+        splitState[transId][idx].amount = parseFloat(val) || 0;
+        updateSplitTotals(transId);
+    }
+}
+
+function updateSplitTotals(transId) {
+    var panel = document.getElementById("splitpanel_" + transId);
+    var transAmount = Math.abs(parseFloat(panel.dataset.transAmount));
+    var entries = splitState[transId] || [];
+    var assigned = entries.reduce(function(s, e) { return s + parseFloat(e.amount || 0); }, 0);
+    assigned = Math.round(assigned * 100) / 100;
+    var remaining = Math.round((transAmount - assigned) * 100) / 100;
+
+    var assignedEl = document.getElementById("splittotal_" + transId);
+    var remainEl = document.getElementById("splitremain_" + transId);
+    if (assignedEl) assignedEl.textContent = assigned.toFixed(2).replace(".", ",");
+    if (remainEl) {
+        remainEl.textContent = remaining.toFixed(2).replace(".", ",");
+        remainEl.style.color = Math.abs(remaining) < 0.01 ? "green" : "red";
+    }
+
+    var btn = document.getElementById("splitbtn_" + transId);
+    if (btn) btn.disabled = !(entries.length > 0 && assigned > 0 && assigned <= transAmount + 0.01);
+}
+
+function submitSplitMatch(transId) {
+    var entries = splitState[transId] || [];
+    if (entries.length === 0) { alert("Bitte mindestens eine Rechnung hinzufuegen."); return; }
+    var panel = document.getElementById("splitpanel_" + transId);
+    var transAmount = Math.abs(parseFloat(panel.dataset.transAmount));
+    var assigned = entries.reduce(function(s, e) { return s + parseFloat(e.amount || 0); }, 0);
+    if (assigned <= 0) { alert("Bitte einen Betrag eingeben."); return; }
+    if (assigned > transAmount + 0.01) { alert("Zugeordneter Betrag ueberschreitet den Transaktionsbetrag."); return; }
+    var splitData = entries.map(function(e) { return { invoice_id: e.invoice_id, amount: parseFloat(e.amount), invoice_type: e.invoice_type || "customer" }; });
+    document.getElementById("splitdata_" + transId).value = JSON.stringify(splitData);
+    document.getElementById("splitmatchform_" + transId).submit();
+}
 </script>';
 print '<style>
 .match-dropdown a.match-item:hover { background: #f0f0f0; }
+.split-panel { background: #fafafa; border: 1px solid #ddd; border-radius: 4px; padding: 12px; }
+.split-result-item:hover { background: #e8f0ff; }
 </style>';
 
 print load_fiche_titre($langs->trans("Transactions"), '', 'fa-university');
@@ -641,8 +942,16 @@ if (count($transactions) > 0) {
             print img_picto($langs->trans("IgnoreTransaction"), 'disable');
             print '</a>';
         } elseif ($trans->status == 'matched') {
-            // Show linked invoice
-            if ($trans->fk_facture > 0) {
+            // Check for split assignments
+            $assignments = $trans->getInvoiceAssignments();
+            if (count($assignments) > 1) {
+                // Multiple invoices (split)
+                foreach ($assignments as $asgn) {
+                    print '<a href="'.DOL_URL_ROOT.'/compta/facture/card.php?facid='.$asgn['fk_facture'].'" title="'.$langs->trans("ViewInvoice").': '.dol_escape_htmltag($asgn['ref']).'">';
+                    print img_picto($langs->trans("ViewInvoice"), 'bill', 'class="paddingright"');
+                    print '</a>';
+                }
+            } elseif ($trans->fk_facture > 0) {
                 print '<a href="'.DOL_URL_ROOT.'/compta/facture/card.php?facid='.$trans->fk_facture.'" title="'.$langs->trans("ViewInvoice").'">';
                 print img_picto($langs->trans("ViewInvoice"), 'bill', 'class="paddingright"');
                 print '</a>';
@@ -690,6 +999,10 @@ if (count($transactions) > 0) {
                     print '</div>';
                     print '</div>';
                 }
+                // Split across multiple invoices
+                print '<a href="#" onclick="openSplitPanel('.$trans->id.'); return false;" title="'.$langs->trans("SplitTransaction").'">';
+                print img_picto($langs->trans("SplitTransaction"), 'split', 'class="paddingright"');
+                print '</a>';
             }
             // Link to bank line
             if ($trans->fk_bank_line > 0) {
@@ -701,6 +1014,44 @@ if (count($transactions) > 0) {
         print '</td>';
 
         print '</tr>';
+
+        // Hidden split panel row (only for imported without invoice)
+        if ($trans->status == 'imported' && !$trans->fk_facture) {
+            $transAmountAbs = abs((float)$trans->amount);
+            print '<tr id="splitrow_'.$trans->id.'" class="splitrow" style="display:none;">';
+            print '<td colspan="6" style="padding:0;">';
+            print '<div class="split-panel" id="splitpanel_'.$trans->id.'" data-trans-id="'.$trans->id.'" data-trans-amount="'.$transAmountAbs.'">';
+            print '<strong>'.$langs->trans("SplitTransaction").'</strong>';
+            print ' &mdash; '.price($trans->amount, 0, $langs, 1, -1, 2, $trans->currency);
+            print '<div style="margin-top:10px; display:flex; gap:6px; align-items:center;">';
+            print '<input type="text" id="splitsearch_'.$trans->id.'" placeholder="'.$langs->trans("SplitSearchPlaceholder").'" style="width:260px;" onkeydown="if(event.key===\'Enter\'){searchSplitInvoices('.$trans->id.');}">';
+            print '<button class="butAction" onclick="searchSplitInvoices('.$trans->id.');">'.$langs->trans("SplitSearch").'</button>';
+            print '</div>';
+            print '<div id="splitresults_'.$trans->id.'" style="display:none; border:1px solid #ccc; background:#fff; max-height:160px; overflow-y:auto; margin-top:4px; border-radius:3px;"></div>';
+            print '<div id="splitlist_'.$trans->id.'" style="margin-top:10px;"></div>';
+            print '<div style="margin-top:8px;">';
+            print $langs->trans("SplitAssigned").': <strong><span id="splittotal_'.$trans->id.'">0,00</span></strong> &euro;';
+            print ' &nbsp;|&nbsp; ';
+            print $langs->trans("SplitRemaining").': <strong><span id="splitremain_'.$trans->id.'" style="color:red;">'.number_format($transAmountAbs, 2, ',', '').'</span></strong> &euro;';
+            print ' <small style="color:#888;">(Gesamt: '.number_format($transAmountAbs, 2, ',', '').' &euro;)</small>';
+            print '</div>';
+            print '<div style="margin-top:10px; display:flex; gap:8px;">';
+            print '<button id="splitbtn_'.$trans->id.'" class="butAction" onclick="submitSplitMatch('.$trans->id.');" disabled>'.$langs->trans("SplitAssign").'</button>';
+            print '<button class="butActionDelete" onclick="openSplitPanel('.$trans->id.');">'.$langs->trans("SplitCancel").'</button>';
+            print '</div>';
+            // Hidden form for submission
+            print '<form id="splitmatchform_'.$trans->id.'" method="POST" action="'.$_SERVER["PHP_SELF"].'">';
+            print '<input type="hidden" name="action" value="splitmatch">';
+            print '<input type="hidden" name="trans_id" value="'.$trans->id.'">';
+            print '<input type="hidden" name="id" value="'.$id.'">';
+            print '<input type="hidden" name="status" value="'.dol_escape_htmltag($status).'">';
+            print '<input type="hidden" name="token" value="'.newToken().'">';
+            print '<input type="hidden" id="splitdata_'.$trans->id.'" name="split_data" value="">';
+            print '</form>';
+            print '</div>';
+            print '</td>';
+            print '</tr>';
+        }
     }
 } else {
     print '<tr class="oddeven">';

@@ -105,3 +105,19 @@ All=All
 Settings=Settings
 AutoReconcileOnImport=Auto-reconcile on import
 AutoReconcileOnImportHelp=When enabled, imported transactions will automatically be marked as reconciled. No manual bank statement upload is required.
+
+# Split matching
+SplitTransaction=Assign manually
+SplitAdd=Add invoice
+SplitRemove=Remove
+SplitAssigned=Assigned
+SplitRemaining=Unassigned
+SplitAssign=Assign
+SplitCancel=Cancel
+SplitSearchPlaceholder=Invoice no. or customer...
+SplitSearch=Search
+SplitNoResults=No invoices found
+SplitAmountMismatch=Assigned amount must not exceed transaction amount
+SplitMinTwoInvoices=At least one invoice must be added
+SplitPaymentsCreated=Payments successfully created
+ErrorInvalidSplitData=Invalid split data

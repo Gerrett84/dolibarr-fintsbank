@@ -424,6 +424,136 @@ class FintsTransaction extends CommonObject
     }
 
     /**
+     * Get split invoice assignments for this transaction
+     *
+     * @return array
+     */
+    public function getInvoiceAssignments()
+    {
+        $assignments = array();
+
+        $sql = "SELECT rowid, fk_facture, invoice_type, amount, fk_paiement";
+        $sql .= " FROM ".MAIN_DB_PREFIX."fintsbank_transaction_invoice";
+        $sql .= " WHERE fk_transaction = ".(int)$this->id;
+
+        $resql = $this->db->query($sql);
+        if ($resql) {
+            while ($obj = $this->db->fetch_object($resql)) {
+                if ($obj->invoice_type === 'supplier') {
+                    $sql2 = "SELECT f.ref, s.nom as thirdparty_name, f.total_ttc as invoice_amount";
+                    $sql2 .= " FROM ".MAIN_DB_PREFIX."facture_fourn f";
+                    $sql2 .= " LEFT JOIN ".MAIN_DB_PREFIX."societe s ON f.fk_soc = s.rowid";
+                    $sql2 .= " WHERE f.rowid = ".(int)$obj->fk_facture;
+                } else {
+                    $sql2 = "SELECT f.ref, s.nom as thirdparty_name, f.total_ttc as invoice_amount";
+                    $sql2 .= " FROM ".MAIN_DB_PREFIX."facture f";
+                    $sql2 .= " LEFT JOIN ".MAIN_DB_PREFIX."societe s ON f.fk_soc = s.rowid";
+                    $sql2 .= " WHERE f.rowid = ".(int)$obj->fk_facture;
+                }
+                $resql2 = $this->db->query($sql2);
+                $inv = ($resql2) ? $this->db->fetch_object($resql2) : null;
+
+                $assignments[] = array(
+                    'id' => $obj->rowid,
+                    'fk_facture' => $obj->fk_facture,
+                    'invoice_type' => $obj->invoice_type,
+                    'amount' => $obj->amount,
+                    'fk_paiement' => $obj->fk_paiement,
+                    'ref' => $inv ? $inv->ref : '',
+                    'thirdparty' => $inv ? $inv->thirdparty_name : '',
+                    'invoice_amount' => $inv ? $inv->invoice_amount : 0,
+                );
+            }
+        }
+        return $assignments;
+    }
+
+    /**
+     * Clear all split invoice assignments for this transaction
+     *
+     * @return int <0 KO, 1 OK
+     */
+    public function clearInvoiceAssignments()
+    {
+        $sql = "DELETE FROM ".MAIN_DB_PREFIX."fintsbank_transaction_invoice WHERE fk_transaction = ".(int)$this->id;
+        return $this->db->query($sql) ? 1 : -1;
+    }
+
+    /**
+     * Search open invoices (customer + supplier) by ref or thirdparty name
+     *
+     * @param string $query Search term
+     * @param int $limit Max results
+     * @return array
+     */
+    public function searchInvoices($query, $limit = 20)
+    {
+        global $conf;
+
+        $esc = '%'.$this->db->escape($query).'%';
+        $matches = array();
+
+        // Customer invoices (fk_statut=1 validated, paye=0 unpaid)
+        $sql = "SELECT f.rowid, f.ref, f.ref_client, f.total_ttc, f.datef, s.nom as thirdparty_name,";
+        $sql .= " COALESCE((SELECT SUM(pf.amount) FROM ".MAIN_DB_PREFIX."paiement_facture pf WHERE pf.fk_facture = f.rowid), 0) as amount_paid";
+        $sql .= " FROM ".MAIN_DB_PREFIX."facture f";
+        $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe s ON f.fk_soc = s.rowid";
+        $sql .= " WHERE f.entity = ".(int)$conf->entity." AND f.fk_statut = 1 AND f.paye = 0";
+        $sql .= " AND (f.ref LIKE '".$esc."' OR f.ref_client LIKE '".$esc."' OR s.nom LIKE '".$esc."')";
+        $sql .= " ORDER BY f.datef DESC LIMIT ".(int)$limit;
+
+        $resql = $this->db->query($sql);
+        if ($resql) {
+            while ($obj = $this->db->fetch_object($resql)) {
+                $remaining = round($obj->total_ttc - $obj->amount_paid, 8);
+                $matches[] = array(
+                    'id' => $obj->rowid,
+                    'ref' => $obj->ref,
+                    'ref_client' => $obj->ref_client,
+                    'amount' => $obj->total_ttc,
+                    'amount_remaining' => $remaining,
+                    'date' => $obj->datef,
+                    'thirdparty' => $obj->thirdparty_name,
+                    'type' => 'customer',
+                );
+            }
+        }
+
+        // Supplier invoices (fk_statut=1 validated, paye=0 unpaid)
+        $sql = "SELECT f.rowid, f.ref, f.ref_supplier as ref_client, f.total_ttc, f.datef, s.nom as thirdparty_name,";
+        $sql .= " COALESCE((SELECT SUM(pf.amount) FROM ".MAIN_DB_PREFIX."paiementfourn_facturefourn pf WHERE pf.fk_facturefourn = f.rowid), 0) as amount_paid";
+        $sql .= " FROM ".MAIN_DB_PREFIX."facture_fourn f";
+        $sql .= " LEFT JOIN ".MAIN_DB_PREFIX."societe s ON f.fk_soc = s.rowid";
+        $sql .= " WHERE f.entity = ".(int)$conf->entity." AND f.fk_statut = 1 AND f.paye = 0";
+        $sql .= " AND (f.ref LIKE '".$esc."' OR f.ref_supplier LIKE '".$esc."' OR s.nom LIKE '".$esc."')";
+        $sql .= " ORDER BY f.datef DESC LIMIT ".(int)$limit;
+
+        $resql = $this->db->query($sql);
+        if ($resql) {
+            while ($obj = $this->db->fetch_object($resql)) {
+                $remaining = round($obj->total_ttc - $obj->amount_paid, 8);
+                $matches[] = array(
+                    'id' => $obj->rowid,
+                    'ref' => $obj->ref,
+                    'ref_client' => $obj->ref_client,
+                    'amount' => $obj->total_ttc,
+                    'amount_remaining' => $remaining,
+                    'date' => $obj->datef,
+                    'thirdparty' => $obj->thirdparty_name,
+                    'type' => 'supplier',
+                );
+            }
+        }
+
+        // Sort combined results by date descending
+        usort($matches, function($a, $b) {
+            return strcmp($b['date'], $a['date']);
+        });
+
+        return array_slice($matches, 0, $limit);
+    }
+
+    /**
      * Get status label
      *
      * @param string $status Status code
