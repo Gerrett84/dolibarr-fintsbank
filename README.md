@@ -1,10 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-<<<<<<< HEAD
-**Version 1.2.2** | Automatischer Kontoabruf per FinTS/HBCI
-=======
 **Version 2.3.0** | Automatischer Kontoabruf per FinTS/HBCI
->>>>>>> v1-dev
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
