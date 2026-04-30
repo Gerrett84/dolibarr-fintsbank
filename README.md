@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 1.2.1** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 2.3.0** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -42,6 +42,14 @@
 - **Zahlungserstellung** - Echte Dolibarr-Zahlung wird erstellt
 - **Kunden/Lieferanten-Verknuepfung** - Drittpartei wird automatisch zugeordnet
 - **Kunden- und Lieferantenrechnungen** - Beide werden unterstuetzt
+
+### Mehrrechnungs-Zuordnung (NEU in v2.3)
+- **Manuell zuordnen** - Eine Transaktion auf mehrere Rechnungen aufteilen
+- **Freie Suche** - Rechnungssuche ohne Betragsbeschraenkung (nach Nummer oder Kunde/Lieferant)
+- **Teilzahlungen** - Nur einen Teilbetrag einer Rechnung zuweisen (z.B. monatliche Raten)
+- **Kunden- und Lieferantenrechnungen** - Beide Typen gleichzeitig in einer Aufteilung moeglich
+- **Offener Restbetrag** - Anzeige des noch offenen Betrags bei teilweise bezahlten Rechnungen
+- **Automatische Zahlung** - Rechnung wird automatisch als bezahlt markiert wenn Gesamtbetrag erreicht
 
 ### Auto-Bankabgleich (NEU in v1.2)
 - **Automatischer Abgleich** - Importierte Transaktionen werden automatisch als abgeglichen markiert
@@ -191,6 +199,15 @@ Bei der Zuordnung wird automatisch:
 ---
 
 ## Changelog
+
+### v2.3.0 (2026-05-01)
+- **Manuell zuordnen** - Transaktion auf mehrere Rechnungen aufteilen (neues Panel mit Live-Suche)
+- **Freie Rechnungssuche** - Suche nach Rechnungsnummer oder Kunde/Lieferant ohne Betragsbeschraenkung
+- **Teilzahlungen** - Beliebigen Teilbetrag einer Rechnung zuweisen (z.B. Ratenzahlung)
+- **Gemischte Zuordnung** - Kunden- und Lieferantenrechnungen in einer Aufteilung kombinierbar
+- **Restbetrags-Anzeige** - Noch offener Betrag sichtbar bei bereits teilweise bezahlten Rechnungen
+- **Warnung bei Ueberschreitung** - Visueller Hinweis wenn Betrag den Rechnungsrest ueberschreitet
+- **DB-Migration** - Neue Tabelle llx_fintsbank_transaction_invoice fuer Mehrfachzuordnungen
 
 ### v1.2.1 (2026-02-23)
 - **Menu-Fix** - Admin-Menü erscheint nur noch unter Home > Einstellungen
