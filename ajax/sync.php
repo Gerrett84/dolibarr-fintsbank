@@ -127,9 +127,6 @@ switch ($action) {
             exit;
         }
 
-        // Debug: Log account details (remove in production)
-        error_log("FinTS Sync - Account: " . $account->bank_code . ", URL: " . $account->fints_url . ", User: " . $account->username);
-
         // Set sync date
         try {
             $fromDate = new DateTime($syncFrom ?: '-30 days');

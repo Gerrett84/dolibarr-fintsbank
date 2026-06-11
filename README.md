@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 2.3.0** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 2.3.2** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -199,6 +199,10 @@ Bei der Zuordnung wird automatisch:
 ---
 
 ## Changelog
+
+### v2.3.2 (2026-06-11)
+- **Sicherheit: Verschlüsselungsschlüssel** - PIN-Verschlüsselung verwendet nun einen zufälligen, in Dolibarr gespeicherten Schlüssel statt eines vorhersehbaren datenbanknamens-basierten Schlüssels
+- **Sicherheit: Keine Zugangsdaten in Logs** - Bank-URL, Benutzername und BLZ werden nicht mehr in error_log geschrieben
 
 ### v2.3.0 (2026-05-01)
 - **Manuell zuordnen** - Transaktion auf mehrere Rechnungen aufteilen (neues Panel mit Live-Suche)
