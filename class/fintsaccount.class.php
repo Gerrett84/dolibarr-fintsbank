@@ -127,7 +127,14 @@ class FintsAccount extends CommonObject
         $this->db = $db;
 
         global $conf;
-        $this->encryptionKey = hash('sha256', $conf->db->name.$conf->db->user.'fintsbank', true);
+        // Use a dedicated random key stored as Dolibarr constant.
+        // Fall back to generating one on first use so existing installs keep working.
+        $storedKey = getDolGlobalString('FINTSBANK_ENCRYPTION_KEY');
+        if (empty($storedKey)) {
+            $storedKey = bin2hex(random_bytes(32));
+            dolibarr_set_const($db, 'FINTSBANK_ENCRYPTION_KEY', $storedKey, 'chaine', 0, '', $conf->entity);
+        }
+        $this->encryptionKey = hash('sha256', $storedKey, true);
     }
 
     /**
