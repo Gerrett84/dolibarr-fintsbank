@@ -74,6 +74,18 @@ tar -czvf dolibarr_files_$(date +%Y%m%d).tar.gz /var/www/dolibarr
 
 ## Installation
 
+### Variante A: Über Dolibarr-Modul-Uploader (kein Konsolenzugriff nötig)
+
+Im [Release-Bereich](https://github.com/Gerrett84/dolibarr-fintsbank/releases) das ZIP-Asset der gewünschten Version herunterladen (z.B. `fintsbank-2.3.2.zip`) und über Dolibarr hochladen:
+
+```
+Setup -> Module -> Externes Modul hochladen
+```
+
+Dieses ZIP enthält die `php-fints`-Bibliothek bereits fertig installiert (`vendor/`), ein separates `composer install` ist **nicht** nötig. Wichtig: Das automatische "Source code (zip)"-Download von GitHub (grüner "Code"-Button) funktioniert **nicht** — das enthält weder `vendor/` noch die von Dolibarr erwartete Ordnerstruktur. Immer das ZIP-Asset aus den Releases nehmen.
+
+### Variante B: Per Git-Checkout (für Entwicklung, Konsolenzugriff erforderlich)
+
 ```bash
 # 1. Download
 cd /var/www/dolibarr/htdocs/custom
@@ -93,7 +105,7 @@ chown -R www-data:www-data /var/www/dolibarr/htdocs/custom/fintsbank
 **Voraussetzungen:**
 - Dolibarr 18.0+
 - PHP 7.4+ mit OpenSSL, cURL, mbstring
-- Composer
+- Composer (nur für Variante B)
 
 ---
 
@@ -240,6 +252,19 @@ Bei der Zuordnung wird automatisch:
 - Massen-Import aller neuen Transaktionen
 - Ignorieren/Wiederherstellen von Transaktionen
 - Deutsche und englische Sprachunterstuetzung
+
+---
+
+## Release erstellen (für Maintainer)
+
+Release-ZIPs für den Dolibarr-Modul-Uploader werden nicht per GitHubs Auto-Zip erstellt, sondern über `build/build-release.sh`, da es die Composer-Abhängigkeit (`vendor/nemiah/php-fints`) bündelt und den intern erwarteten Ordnernamen (`fintsbank/` statt `dolibarr-fintsbank-<version>/`) setzt:
+
+```bash
+./build/build-release.sh v2.3.2
+gh release upload v2.3.2 fintsbank-2.3.2.zip -R Gerrett84/dolibarr-fintsbank
+```
+
+Details siehe Kommentar am Anfang des Skripts.
 
 ---
 
