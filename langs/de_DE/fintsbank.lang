@@ -121,3 +121,12 @@ SplitAmountMismatch=Zugeordneter Betrag darf den Transaktionsbetrag nicht uebers
 SplitMinTwoInvoices=Mindestens eine Rechnung muss hinzugefuegt werden
 SplitPaymentsCreated=Zahlungen erfolgreich erstellt
 ErrorInvalidSplitData=Ungueltige Aufteilungsdaten
+
+# 2.3.3: split assignment fixes
+ErrorTransactionAlreadyAssigned=Diese Buchung ist bereits einer Rechnung zugeordnet. Bitte zuerst die Zuordnung aufheben.
+ErrorSplitExceedsInvoice=Der Betrag für Rechnung %s übersteigt den offenen Betrag (%s) oder die Rechnung ist bereits bezahlt.
+ErrorSplitExceedsTransaction=Die Summe der zugeordneten Beträge übersteigt den Buchungsbetrag.
+SplitMultiHint=Mehrere Rechnungen nacheinander in der Trefferliste anklicken – die Liste bleibt offen.
+ConfirmUnmatch=Zuordnung aufheben? Die dabei erstellten Zahlungen werden gelöscht und die Rechnungen wieder auf offen gesetzt. Die Bankbuchung bleibt erhalten.
+ErrorUnmatchBankLineReconciled=Zuordnung kann nicht aufgehoben werden: Die Bankbuchung ist bereits abgeglichen.
+ErrorUnmatchBankLineInAccounting=Zuordnung kann nicht aufgehoben werden: Die Bankbuchung wurde bereits in die Buchhaltung übernommen.
