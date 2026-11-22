@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 2.3.2** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 2.3.3** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -76,7 +76,7 @@ tar -czvf dolibarr_files_$(date +%Y%m%d).tar.gz /var/www/dolibarr
 
 ### Variante A: Über Dolibarr-Modul-Uploader (kein Konsolenzugriff nötig)
 
-Im [Release-Bereich](https://github.com/Gerrett84/dolibarr-fintsbank/releases) das ZIP-Asset der gewünschten Version herunterladen (z.B. `fintsbank-2.3.2.zip`) und über Dolibarr hochladen:
+Im [Release-Bereich](https://github.com/Gerrett84/dolibarr-fintsbank/releases) das ZIP-Asset der gewünschten Version herunterladen (z.B. `fintsbank-2.3.3.zip`) und über Dolibarr hochladen:
 
 ```
 Setup -> Module -> Externes Modul hochladen
@@ -211,6 +211,12 @@ Bei der Zuordnung wird automatisch:
 ---
 
 ## Changelog
+
+### v2.3.3 (2026-11-22)
+- **Eine Zahlung auf mehrere Rechnungen** - Im Aufteilen-Fenster bleibt die Trefferliste offen, mehrere Rechnungen werden nacheinander angeklickt (bereits gewählte mit ✓); vorgeschlagen wird jeweils der offene Rechnungsbetrag
+- **Restbetrag später zuordnen** - Ist die Zahlung größer als die zugeordnete Rechnung, wird nur der offene Rechnungsbetrag gebucht; die Buchung zeigt „Rest x €" und kann weiteren Rechnungen zugeordnet werden (auch später)
+- **Fix: doppelte Zahlungen** - Nach Zuordnen/Aufheben/Import leitet die Seite weiter, Neuladen bucht nichts mehr erneut; der Server lehnt Beträge über dem Rest der Zahlung oder dem offenen Rechnungsbetrag ab
+- **„Zuordnung aufheben" macht die Zahlungen rückgängig** - löscht nach Rückfrage die erzeugten Zahlungen und setzt die Rechnungen wieder auf offen, die Bankbuchung bleibt (nicht bei abgeglichenen oder bereits in die Buchhaltung übernommenen Buchungen)
 
 ### v2.3.2 (2026-06-11)
 - **Sicherheit: Verschlüsselungsschlüssel** - PIN-Verschlüsselung verwendet nun einen zufälligen, in Dolibarr gespeicherten Schlüssel statt eines vorhersehbaren datenbanknamens-basierten Schlüssels
