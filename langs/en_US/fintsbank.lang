@@ -121,3 +121,14 @@ SplitAmountMismatch=Assigned amount must not exceed transaction amount
 SplitMinTwoInvoices=At least one invoice must be added
 SplitPaymentsCreated=Payments successfully created
 ErrorInvalidSplitData=Invalid split data
+
+# 2.3.3: split assignment fixes
+ErrorTransactionAlreadyAssigned=This transaction is already assigned to an invoice. Remove the match first.
+ErrorSplitExceedsInvoice=The amount for invoice %s exceeds its open amount (%s) or the invoice is already paid.
+ErrorSplitExceedsTransaction=The assigned amounts exceed the transaction amount.
+SplitMultiHint=Click several invoices in the result list one after another - the list stays open.
+ConfirmUnmatch=Remove the match? The payments created by it are deleted and the invoices set back to unpaid. The bank entry is kept.
+ErrorUnmatchBankLineReconciled=Cannot remove the match: the bank entry is already reconciled.
+ErrorUnmatchBankLineInAccounting=Cannot remove the match: the bank entry has already been transferred to accounting.
+AssignRemainder=Assign remaining amount to further invoices
+Remainder=Remaining

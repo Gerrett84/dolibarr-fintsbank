@@ -473,6 +473,37 @@ class FintsTransaction extends CommonObject
      *
      * @return int <0 KO, 1 OK
      */
+    /**
+     * Amount of the transaction already assigned to invoices
+     *
+     * @return float
+     */
+    public function getAssignedAmount()
+    {
+        $res = $this->db->query("SELECT COUNT(*) AS nb, COALESCE(SUM(amount), 0) AS total FROM ".MAIN_DB_PREFIX."fintsbank_transaction_invoice WHERE fk_transaction = ".(int) $this->id);
+        $o = $res ? $this->db->fetch_object($res) : null;
+        if ($o && (int) $o->nb > 0) {
+            return round((float) $o->total, 2);
+        }
+        // Matches from before 2.3.3 have no assignment rows and always used the full amount
+        return ($this->status == 'matched' && $this->fk_facture > 0) ? round(abs((float) $this->amount), 2) : 0.0;
+    }
+
+    /**
+     * Amount of the transaction not yet assigned to invoices
+     *
+     * @return float
+     */
+    public function getRemainingAmount()
+    {
+        return round(abs((float) $this->amount) - $this->getAssignedAmount(), 2);
+    }
+
+    /**
+     * Delete all invoice assignment rows of this transaction
+     *
+     * @return int
+     */
     public function clearInvoiceAssignments()
     {
         $sql = "DELETE FROM ".MAIN_DB_PREFIX."fintsbank_transaction_invoice WHERE fk_transaction = ".(int)$this->id;
@@ -576,5 +607,82 @@ class FintsTransaction extends CommonObject
             default:
                 return '<span class="badge badge-status0">'.$status.'</span>';
         }
+    }
+
+    /**
+     * Remove the payments this transaction created (when a match is undone), so the
+     * invoices are open again and a new assignment does not pay them twice. The bank
+     * line itself is kept. Refused when the bank line is reconciled or already
+     * transferred to accounting.
+     *
+     * @param User $user User
+     * @return int Number of removed payments, <0 on error ($this->error set)
+     */
+    public function revertPayments($user)
+    {
+        require_once DOL_DOCUMENT_ROOT.'/compta/facture/class/facture.class.php';
+        require_once DOL_DOCUMENT_ROOT.'/fourn/class/fournisseur.facture.class.php';
+
+        $bankLine = (int) $this->fk_bank_line;
+        $payments = array(); // id => 'customer'|'supplier'
+
+        $res = $this->db->query("SELECT fk_paiement, invoice_type FROM ".MAIN_DB_PREFIX."fintsbank_transaction_invoice WHERE fk_transaction = ".(int) $this->id." AND fk_paiement > 0");
+        while ($res && ($o = $this->db->fetch_object($res))) {
+            $payments[(int) $o->fk_paiement] = ($o->invoice_type === 'supplier') ? 'supplier' : 'customer';
+        }
+        if ($bankLine > 0) {
+            $chk = $this->db->query("SELECT rappro FROM ".MAIN_DB_PREFIX."bank WHERE rowid = ".$bankLine);
+            if ($chk && ($o = $this->db->fetch_object($chk)) && (int) $o->rappro > 0) {
+                $this->error = 'BankLineReconciled';
+                return -1;
+            }
+            $chk = $this->db->query("SELECT COUNT(*) AS nb FROM ".MAIN_DB_PREFIX."accounting_bookkeeping WHERE doc_type = 'bank' AND fk_doc = ".$bankLine);
+            if ($chk && ($o = $this->db->fetch_object($chk)) && (int) $o->nb > 0) {
+                $this->error = 'BankLineInAccounting';
+                return -1;
+            }
+            $res = $this->db->query("SELECT url_id, type FROM ".MAIN_DB_PREFIX."bank_url WHERE fk_bank = ".$bankLine." AND type IN ('payment', 'payment_supplier')");
+            while ($res && ($o = $this->db->fetch_object($res))) {
+                $payments[(int) $o->url_id] = ($o->type === 'payment_supplier') ? 'supplier' : 'customer';
+            }
+        }
+
+        $removed = 0;
+        $this->db->begin();
+        foreach ($payments as $pid => $type) {
+            $linkTable = ($type === 'supplier') ? 'paiementfourn_facturefourn' : 'paiement_facture';
+            $payTable = ($type === 'supplier') ? 'paiementfourn' : 'paiement';
+            $invCol = ($type === 'supplier') ? 'fk_facturefourn' : 'fk_facture';
+            $payCol = ($type === 'supplier') ? 'fk_paiementfourn' : 'fk_paiement';
+            $urlType = ($type === 'supplier') ? 'payment_supplier' : 'payment';
+
+            $invoices = array();
+            $res = $this->db->query("SELECT ".$invCol." AS fid FROM ".MAIN_DB_PREFIX.$linkTable." WHERE ".$payCol." = ".(int) $pid);
+            while ($res && ($o = $this->db->fetch_object($res))) {
+                $invoices[] = (int) $o->fid;
+            }
+
+            $ok = $this->db->query("DELETE FROM ".MAIN_DB_PREFIX.$linkTable." WHERE ".$payCol." = ".(int) $pid)
+                && $this->db->query("DELETE FROM ".MAIN_DB_PREFIX."bank_url WHERE url_id = ".(int) $pid." AND type = '".$urlType."'")
+                && $this->db->query("DELETE FROM ".MAIN_DB_PREFIX.$payTable." WHERE rowid = ".(int) $pid);
+            if (!$ok) {
+                $this->db->rollback();
+                $this->error = $this->db->lasterror();
+                return -1;
+            }
+            $removed++;
+
+            foreach ($invoices as $fid) {
+                $inv = ($type === 'supplier') ? new FactureFournisseur($this->db) : new Facture($this->db);
+                if ($inv->fetch($fid) > 0 && !empty($inv->paye)) {
+                    $inv->setUnpaid($user);
+                }
+            }
+        }
+        if ($bankLine > 0) {
+            $this->db->query("DELETE FROM ".MAIN_DB_PREFIX."bank_url WHERE fk_bank = ".$bankLine." AND type = 'company'");
+        }
+        $this->db->commit();
+        return $removed;
     }
 }

@@ -167,14 +167,30 @@ if ($action == 'automatch' && GETPOST('trans_id', 'int')) {
 // Manual match with invoice - creates real payment
 if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'int')) {
     $trans = new FintsTransaction($db);
-    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0 && $trans->getRemainingAmount() <= 0.01) {
+        setEventMessages($langs->trans("ErrorTransactionAlreadyAssigned"), null, 'errors');
+    } elseif ($trans->id > 0) {
         $invoiceId = GETPOST('invoice_id', 'int');
         $error = 0;
+        // Pay at most the open invoice amount and what is left of the transaction;
+        // a remainder can be assigned to further invoices afterwards
+        $chkInv = ($trans->amount > 0) ? new Facture($db) : new FactureFournisseur($db);
+        $payAmount = $trans->getRemainingAmount();
+        if ($chkInv->fetch($invoiceId) > 0) {
+            $payAmount = min($payAmount, round((float) $chkInv->total_ttc - (float) $chkInv->getSommePaiement(), 2));
+        }
+        if ($payAmount <= 0) {
+            setEventMessages($langs->trans("ErrorSplitExceedsInvoice", $chkInv->ref, price(0)), null, 'errors');
+            $error++;
+        }
+        $signedPay = ($trans->amount > 0) ? $payAmount : -$payAmount;
 
         $db->begin();
 
         // Determine if customer or supplier invoice based on amount
-        if ($trans->amount > 0) {
+        if ($error) {
+            // nothing to pay
+        } elseif ($trans->amount > 0) {
             // Customer invoice payment (incoming money)
             $facture = new Facture($db);
             if ($facture->fetch($invoiceId) > 0) {
@@ -184,8 +200,8 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                 // Create payment
                 $paiement = new Paiement($db);
                 $paiement->datepaye = $trans->booking_date;
-                $paiement->amounts = array($invoiceId => $trans->amount);
-                $paiement->multicurrency_amounts = array($invoiceId => $trans->amount);
+                $paiement->amounts = array($invoiceId => $payAmount);
+                $paiement->multicurrency_amounts = array($invoiceId => $payAmount);
                 $paiement->multicurrency_code = array($invoiceId => $trans->currency);
                 $paiement->multicurrency_tx = array($invoiceId => 1);
                 $paiement->paiementid = dol_getIdFromCode($db, 'VIR', 'c_paiement', 'code', 'id', 1); // Bank transfer
@@ -228,8 +244,13 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                             }
                         }
                     }
-                    // Link transaction to invoice and third party
-                    $trans->linkToInvoice($invoiceId);
+                    // Record the assignment (several invoices may share one transaction)
+                    $db->query("INSERT INTO ".MAIN_DB_PREFIX."fintsbank_transaction_invoice (fk_transaction, fk_facture, invoice_type, amount, fk_paiement, entity)"
+                        ." VALUES (".(int)$trans->id.", ".(int)$invoiceId.", '".($trans->amount > 0 ? 'customer' : 'supplier')."', ".(float)$payAmount.", ".(int)$paiement_id.", ".(int)$conf->entity.")");
+                    // Link transaction to invoice and third party (first invoice stays the main link)
+                    if (!($trans->fk_facture > 0)) {
+                        $trans->linkToInvoice($invoiceId);
+                    }
                     if ($facture->socid > 0) {
                         $trans->linkToThirdParty($facture->socid);
                     }
@@ -252,8 +273,8 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                 // Create supplier payment
                 $paiement = new PaiementFourn($db);
                 $paiement->datepaye = $trans->booking_date;
-                $paiement->amounts = array($invoiceId => abs($trans->amount));
-                $paiement->multicurrency_amounts = array($invoiceId => abs($trans->amount));
+                $paiement->amounts = array($invoiceId => $payAmount);
+                $paiement->multicurrency_amounts = array($invoiceId => $payAmount);
                 $paiement->multicurrency_code = array($invoiceId => $trans->currency);
                 $paiement->multicurrency_tx = array($invoiceId => 1);
                 $paiement->paiementid = dol_getIdFromCode($db, 'VIR', 'c_paiement', 'code', 'id', 1);
@@ -292,8 +313,13 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                             }
                         }
                     }
-                    // Link transaction to invoice and third party
-                    $trans->linkToInvoice($invoiceId);
+                    // Record the assignment (several invoices may share one transaction)
+                    $db->query("INSERT INTO ".MAIN_DB_PREFIX."fintsbank_transaction_invoice (fk_transaction, fk_facture, invoice_type, amount, fk_paiement, entity)"
+                        ." VALUES (".(int)$trans->id.", ".(int)$invoiceId.", '".($trans->amount > 0 ? 'customer' : 'supplier')."', ".(float)$payAmount.", ".(int)$paiement_id.", ".(int)$conf->entity.")");
+                    // Link transaction to invoice and third party (first invoice stays the main link)
+                    if (!($trans->fk_facture > 0)) {
+                        $trans->linkToInvoice($invoiceId);
+                    }
                     if ($facture->socid > 0) {
                         $trans->linkToThirdParty($facture->socid);
                     }
@@ -320,6 +346,14 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
 if ($action == 'unmatch' && GETPOST('trans_id', 'int')) {
     $trans = new FintsTransaction($db);
     if ($trans->fetch(GETPOST('trans_id', 'int')) > 0) {
+        // Remove the payments created by the match first - otherwise the invoices stay
+        // paid and a new assignment pays them a second time
+        $reverted = $trans->revertPayments($user);
+        if ($reverted < 0) {
+            setEventMessages($langs->trans("ErrorUnmatch".$trans->error), null, 'errors');
+            header('Location: '.$_SERVER["PHP_SELF"].'?id='.$id.'&status='.urlencode($status));
+            exit;
+        }
         // Clear any split assignments too
         $trans->clearInvoiceAssignments();
         // Keep imported status if already imported, otherwise set to new
@@ -339,17 +373,42 @@ if ($action == 'splitmatch' && GETPOST('trans_id', 'int')) {
         $splitDataRaw = GETPOST('split_data', 'none');
         $splitData = json_decode($splitDataRaw, true);
 
-        if (!is_array($splitData) || count($splitData) == 0) {
+        // Server-side checks: never assign a transaction twice (e.g. a reloaded form),
+        // never pay more than the transaction amount or an invoice's open amount
+        $splitError = '';
+        $transRemaining = $trans->getRemainingAmount();
+        if ($transRemaining <= 0.01) {
+            $splitError = $langs->trans("ErrorTransactionAlreadyAssigned");
+        } elseif (is_array($splitData)) {
+            $sum = 0;
+            foreach ($splitData as $chk) {
+                $chkAmount = (float) ($chk['amount'] ?? 0);
+                $sum += $chkAmount;
+                $chkInv = (isset($chk['invoice_type']) && $chk['invoice_type'] === 'supplier') ? new FactureFournisseur($db) : new Facture($db);
+                if ($chkInv->fetch((int) ($chk['invoice_id'] ?? 0)) > 0) {
+                    $open = (float) $chkInv->total_ttc - (float) $chkInv->getSommePaiement();
+                    if (!empty($chkInv->paye) || $chkAmount > $open + 0.01) {
+                        $splitError = $langs->trans("ErrorSplitExceedsInvoice", $chkInv->ref, price($open));
+                        break;
+                    }
+                }
+            }
+            if (!$splitError && $sum > $transRemaining + 0.01) {
+                $splitError = $langs->trans("ErrorSplitExceedsTransaction");
+            }
+        }
+
+        if ($splitError) {
+            setEventMessages($splitError, null, 'errors');
+        } elseif (!is_array($splitData) || count($splitData) == 0) {
             setEventMessages($langs->trans("ErrorInvalidSplitData"), null, 'errors');
         } else {
             $error = 0;
             $db->begin();
 
-            // Clear existing split assignments
-            $trans->clearInvoiceAssignments();
-
-            $firstSocid = 0;
-            $firstFkFacture = 0;
+            // Assignments are added to existing ones (remainder of a partly assigned transaction)
+            $firstSocid = (int) $trans->fk_societe;
+            $firstFkFacture = (int) $trans->fk_facture;
             $seenSocids = array();
 
             foreach ($splitData as $split) {
@@ -574,6 +633,12 @@ if ($action == 'importall' && $id > 0) {
     }
 }
 
+// Post/Redirect/Get: a reload of the page must never run a payment action again
+if (in_array($action, array('match', 'splitmatch', 'unmatch', 'ignore', 'unignore', 'import', 'automatchall', 'importall'))) {
+    header('Location: '.$_SERVER["PHP_SELF"].'?id='.((int) $id).($status !== '' ? '&status='.urlencode($status) : ''));
+    exit;
+}
+
 /*
  * View
  */
@@ -662,8 +727,9 @@ function renderSplitResults(transId, results) {
         var typeLabel = r.type === "supplier"
             ? "<span style=\"background:#f0ad4e;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-right:4px;\">Lieferant</span>"
             : "<span style=\"background:#5bc0de;color:#fff;font-size:10px;padding:1px 4px;border-radius:3px;margin-right:4px;\">Kunde</span>";
-        html += "<div class=\"split-result-item\" onclick=\"addSplitEntryFromSearch(" + transId + "," + idx + ")\" style=\"padding:4px 6px; cursor:pointer; border-bottom:1px solid #eee;\">";
-        html += typeLabel + "<strong>" + escHtml(r.ref) + "</strong> &mdash; " + escHtml(r.thirdparty || "") + " &mdash; " + total + " &euro;" + partialNote;
+        var added = (splitState[transId] || []).some(function(e) { return e.invoice_id == r.id; });
+        html += "<div class=\"split-result-item\" onclick=\"addSplitEntryFromSearch(" + transId + "," + idx + ")\" style=\"padding:4px 6px; cursor:pointer; border-bottom:1px solid #eee;" + (added ? " opacity:0.5;" : "") + "\">";
+        html += (added ? "&#10003; " : "+ ") + typeLabel + "<strong>" + escHtml(r.ref) + "</strong> &mdash; " + escHtml(r.thirdparty || "") + " &mdash; " + total + " &euro;" + partialNote;
         html += "</div>";
     });
     resultsDiv.innerHTML = html;
@@ -686,15 +752,14 @@ function addSplitEntry(transId, invoiceId, ref, thirdparty, invoiceAmount, invoi
     var assigned = splitState[transId].reduce(function(s, e) { return s + parseFloat(e.amount); }, 0);
     var transRemaining = Math.round((transAmount - assigned) * 100) / 100;
     // Default amount based on invoice total (not remaining) to avoid 0-amount edge cases
-    var defaultAmt = Math.min(invoiceAmount, transRemaining > 0 ? transRemaining : invoiceAmount);
-    if (defaultAmt <= 0) defaultAmt = transRemaining > 0 ? transRemaining : invoiceAmount;
     var invRem = (invoiceRemaining !== undefined && invoiceRemaining > 0) ? invoiceRemaining : invoiceAmount;
+    var defaultAmt = Math.min(invRem, transRemaining > 0 ? transRemaining : invRem);
+    if (defaultAmt <= 0) defaultAmt = transRemaining > 0 ? transRemaining : invRem;
+    defaultAmt = Math.round(defaultAmt * 100) / 100;
     splitState[transId].push({ invoice_id: invoiceId, ref: ref, thirdparty: thirdparty, invoice_amount: invoiceAmount, invoice_remaining: invRem, amount: defaultAmt, invoice_type: invoiceType || "customer" });
-    // Clear search
-    var input = document.getElementById("splitsearch_" + transId);
-    if (input) input.value = "";
-    document.getElementById("splitresults_" + transId).style.display = "none";
+    // Keep the result list open so further invoices can be added with one click
     renderSplitEntries(transId);
+    if (splitSearchResults[transId]) renderSplitResults(transId, splitSearchResults[transId]);
 }
 
 function removeSplitEntry(transId, idx) {
@@ -956,6 +1021,14 @@ if (count($transactions) > 0) {
                 print img_picto($langs->trans("ViewInvoice"), 'bill', 'class="paddingright"');
                 print '</a>';
             }
+            // Remainder not yet assigned: assign further invoices
+            $transRest = $trans->getRemainingAmount();
+            if ($transRest > 0.01) {
+                print '<a href="#" onclick="openSplitPanel('.$trans->id.'); return false;" title="'.dol_escape_htmltag($langs->trans("AssignRemainder")).'">';
+                print img_picto($langs->trans("AssignRemainder"), 'split', 'class="paddingright"');
+                print '</a>';
+                print '<span class="badge badge-warning" style="margin-right:4px;">'.$langs->trans("Remainder").' '.price($transRest, 0, $langs, 1, -1, 2).'</span>';
+            }
             // View bank line
             if ($trans->fk_bank_line > 0) {
                 print '<a href="'.DOL_URL_ROOT.'/compta/bank/line.php?rowid='.$trans->fk_bank_line.'" title="'.$langs->trans("ViewBankLine").'">';
@@ -963,7 +1036,7 @@ if (count($transactions) > 0) {
                 print '</a>';
             }
             // Unmatch
-            print '<a href="'.$_SERVER["PHP_SELF"].'?action=unmatch&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("Unmatch").'">';
+            print '<a href="'.$_SERVER["PHP_SELF"].'?action=unmatch&trans_id='.$trans->id.'&id='.$id.'&status='.$status.'&token='.newToken().'" title="'.$langs->trans("Unmatch").'" onclick="return confirm(\''.dol_escape_js($langs->transnoentities("ConfirmUnmatch")).'\');">';
             print img_picto($langs->trans("Unmatch"), 'unlink');
             print '</a>';
         } elseif ($trans->status == 'ignored') {
@@ -1016,8 +1089,8 @@ if (count($transactions) > 0) {
         print '</tr>';
 
         // Hidden split panel row (only for imported without invoice)
-        if ($trans->status == 'imported' && !$trans->fk_facture) {
-            $transAmountAbs = abs((float)$trans->amount);
+        if (($trans->status == 'imported' && !$trans->fk_facture) || ($trans->status == 'matched' && $trans->getRemainingAmount() > 0.01)) {
+            $transAmountAbs = $trans->getRemainingAmount();
             print '<tr id="splitrow_'.$trans->id.'" class="splitrow" style="display:none;">';
             print '<td colspan="6" style="padding:0;">';
             print '<div class="split-panel" id="splitpanel_'.$trans->id.'" data-trans-id="'.$trans->id.'" data-trans-amount="'.$transAmountAbs.'">';
@@ -1027,6 +1100,7 @@ if (count($transactions) > 0) {
             print '<input type="text" id="splitsearch_'.$trans->id.'" placeholder="'.$langs->trans("SplitSearchPlaceholder").'" style="width:260px;" onkeydown="if(event.key===\'Enter\'){searchSplitInvoices('.$trans->id.');}">';
             print '<button class="butAction" onclick="searchSplitInvoices('.$trans->id.');">'.$langs->trans("SplitSearch").'</button>';
             print '</div>';
+            print '<div style="font-size:11px;color:#888;margin-top:4px;">'.$langs->trans("SplitMultiHint").'</div>';
             print '<div id="splitresults_'.$trans->id.'" style="display:none; border:1px solid #ccc; background:#fff; max-height:160px; overflow-y:auto; margin-top:4px; border-radius:3px;"></div>';
             print '<div id="splitlist_'.$trans->id.'" style="margin-top:10px;"></div>';
             print '<div style="margin-top:8px;">';
