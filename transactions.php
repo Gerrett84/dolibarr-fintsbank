@@ -167,16 +167,30 @@ if ($action == 'automatch' && GETPOST('trans_id', 'int')) {
 // Manual match with invoice - creates real payment
 if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'int')) {
     $trans = new FintsTransaction($db);
-    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0 && ($trans->status == 'matched' || $trans->fk_facture > 0 || count($trans->getInvoiceAssignments()) > 0)) {
+    if ($trans->fetch(GETPOST('trans_id', 'int')) > 0 && $trans->getRemainingAmount() <= 0.01) {
         setEventMessages($langs->trans("ErrorTransactionAlreadyAssigned"), null, 'errors');
     } elseif ($trans->id > 0) {
         $invoiceId = GETPOST('invoice_id', 'int');
         $error = 0;
+        // Pay at most the open invoice amount and what is left of the transaction;
+        // a remainder can be assigned to further invoices afterwards
+        $chkInv = ($trans->amount > 0) ? new Facture($db) : new FactureFournisseur($db);
+        $payAmount = $trans->getRemainingAmount();
+        if ($chkInv->fetch($invoiceId) > 0) {
+            $payAmount = min($payAmount, round((float) $chkInv->total_ttc - (float) $chkInv->getSommePaiement(), 2));
+        }
+        if ($payAmount <= 0) {
+            setEventMessages($langs->trans("ErrorSplitExceedsInvoice", $chkInv->ref, price(0)), null, 'errors');
+            $error++;
+        }
+        $signedPay = ($trans->amount > 0) ? $payAmount : -$payAmount;
 
         $db->begin();
 
         // Determine if customer or supplier invoice based on amount
-        if ($trans->amount > 0) {
+        if ($error) {
+            // nothing to pay
+        } elseif ($trans->amount > 0) {
             // Customer invoice payment (incoming money)
             $facture = new Facture($db);
             if ($facture->fetch($invoiceId) > 0) {
@@ -186,8 +200,8 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                 // Create payment
                 $paiement = new Paiement($db);
                 $paiement->datepaye = $trans->booking_date;
-                $paiement->amounts = array($invoiceId => $trans->amount);
-                $paiement->multicurrency_amounts = array($invoiceId => $trans->amount);
+                $paiement->amounts = array($invoiceId => $payAmount);
+                $paiement->multicurrency_amounts = array($invoiceId => $payAmount);
                 $paiement->multicurrency_code = array($invoiceId => $trans->currency);
                 $paiement->multicurrency_tx = array($invoiceId => 1);
                 $paiement->paiementid = dol_getIdFromCode($db, 'VIR', 'c_paiement', 'code', 'id', 1); // Bank transfer
@@ -230,8 +244,13 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                             }
                         }
                     }
-                    // Link transaction to invoice and third party
-                    $trans->linkToInvoice($invoiceId);
+                    // Record the assignment (several invoices may share one transaction)
+                    $db->query("INSERT INTO ".MAIN_DB_PREFIX."fintsbank_transaction_invoice (fk_transaction, fk_facture, invoice_type, amount, fk_paiement, entity)"
+                        ." VALUES (".(int)$trans->id.", ".(int)$invoiceId.", '".($trans->amount > 0 ? 'customer' : 'supplier')."', ".(float)$payAmount.", ".(int)$paiement_id.", ".(int)$conf->entity.")");
+                    // Link transaction to invoice and third party (first invoice stays the main link)
+                    if (!($trans->fk_facture > 0)) {
+                        $trans->linkToInvoice($invoiceId);
+                    }
                     if ($facture->socid > 0) {
                         $trans->linkToThirdParty($facture->socid);
                     }
@@ -254,8 +273,8 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                 // Create supplier payment
                 $paiement = new PaiementFourn($db);
                 $paiement->datepaye = $trans->booking_date;
-                $paiement->amounts = array($invoiceId => abs($trans->amount));
-                $paiement->multicurrency_amounts = array($invoiceId => abs($trans->amount));
+                $paiement->amounts = array($invoiceId => $payAmount);
+                $paiement->multicurrency_amounts = array($invoiceId => $payAmount);
                 $paiement->multicurrency_code = array($invoiceId => $trans->currency);
                 $paiement->multicurrency_tx = array($invoiceId => 1);
                 $paiement->paiementid = dol_getIdFromCode($db, 'VIR', 'c_paiement', 'code', 'id', 1);
@@ -294,8 +313,13 @@ if ($action == 'match' && GETPOST('trans_id', 'int') && GETPOST('invoice_id', 'i
                             }
                         }
                     }
-                    // Link transaction to invoice and third party
-                    $trans->linkToInvoice($invoiceId);
+                    // Record the assignment (several invoices may share one transaction)
+                    $db->query("INSERT INTO ".MAIN_DB_PREFIX."fintsbank_transaction_invoice (fk_transaction, fk_facture, invoice_type, amount, fk_paiement, entity)"
+                        ." VALUES (".(int)$trans->id.", ".(int)$invoiceId.", '".($trans->amount > 0 ? 'customer' : 'supplier')."', ".(float)$payAmount.", ".(int)$paiement_id.", ".(int)$conf->entity.")");
+                    // Link transaction to invoice and third party (first invoice stays the main link)
+                    if (!($trans->fk_facture > 0)) {
+                        $trans->linkToInvoice($invoiceId);
+                    }
                     if ($facture->socid > 0) {
                         $trans->linkToThirdParty($facture->socid);
                     }
@@ -352,7 +376,8 @@ if ($action == 'splitmatch' && GETPOST('trans_id', 'int')) {
         // Server-side checks: never assign a transaction twice (e.g. a reloaded form),
         // never pay more than the transaction amount or an invoice's open amount
         $splitError = '';
-        if ($trans->status == 'matched' || $trans->fk_facture > 0 || count($trans->getInvoiceAssignments()) > 0) {
+        $transRemaining = $trans->getRemainingAmount();
+        if ($transRemaining <= 0.01) {
             $splitError = $langs->trans("ErrorTransactionAlreadyAssigned");
         } elseif (is_array($splitData)) {
             $sum = 0;
@@ -368,7 +393,7 @@ if ($action == 'splitmatch' && GETPOST('trans_id', 'int')) {
                     }
                 }
             }
-            if (!$splitError && $sum > abs((float) $trans->amount) + 0.01) {
+            if (!$splitError && $sum > $transRemaining + 0.01) {
                 $splitError = $langs->trans("ErrorSplitExceedsTransaction");
             }
         }
@@ -381,11 +406,9 @@ if ($action == 'splitmatch' && GETPOST('trans_id', 'int')) {
             $error = 0;
             $db->begin();
 
-            // Clear existing split assignments
-            $trans->clearInvoiceAssignments();
-
-            $firstSocid = 0;
-            $firstFkFacture = 0;
+            // Assignments are added to existing ones (remainder of a partly assigned transaction)
+            $firstSocid = (int) $trans->fk_societe;
+            $firstFkFacture = (int) $trans->fk_facture;
             $seenSocids = array();
 
             foreach ($splitData as $split) {
@@ -998,6 +1021,14 @@ if (count($transactions) > 0) {
                 print img_picto($langs->trans("ViewInvoice"), 'bill', 'class="paddingright"');
                 print '</a>';
             }
+            // Remainder not yet assigned: assign further invoices
+            $transRest = $trans->getRemainingAmount();
+            if ($transRest > 0.01) {
+                print '<a href="#" onclick="openSplitPanel('.$trans->id.'); return false;" title="'.dol_escape_htmltag($langs->trans("AssignRemainder")).'">';
+                print img_picto($langs->trans("AssignRemainder"), 'split', 'class="paddingright"');
+                print '</a>';
+                print '<span class="badge badge-warning" style="margin-right:4px;">'.$langs->trans("Remainder").' '.price($transRest, 0, $langs, 1, -1, 2).'</span>';
+            }
             // View bank line
             if ($trans->fk_bank_line > 0) {
                 print '<a href="'.DOL_URL_ROOT.'/compta/bank/line.php?rowid='.$trans->fk_bank_line.'" title="'.$langs->trans("ViewBankLine").'">';
@@ -1058,8 +1089,8 @@ if (count($transactions) > 0) {
         print '</tr>';
 
         // Hidden split panel row (only for imported without invoice)
-        if ($trans->status == 'imported' && !$trans->fk_facture) {
-            $transAmountAbs = abs((float)$trans->amount);
+        if (($trans->status == 'imported' && !$trans->fk_facture) || ($trans->status == 'matched' && $trans->getRemainingAmount() > 0.01)) {
+            $transAmountAbs = $trans->getRemainingAmount();
             print '<tr id="splitrow_'.$trans->id.'" class="splitrow" style="display:none;">';
             print '<td colspan="6" style="padding:0;">';
             print '<div class="split-panel" id="splitpanel_'.$trans->id.'" data-trans-id="'.$trans->id.'" data-trans-amount="'.$transAmountAbs.'">';

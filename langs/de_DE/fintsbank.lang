@@ -130,3 +130,5 @@ SplitMultiHint=Mehrere Rechnungen nacheinander in der Trefferliste anklicken –
 ConfirmUnmatch=Zuordnung aufheben? Die dabei erstellten Zahlungen werden gelöscht und die Rechnungen wieder auf offen gesetzt. Die Bankbuchung bleibt erhalten.
 ErrorUnmatchBankLineReconciled=Zuordnung kann nicht aufgehoben werden: Die Bankbuchung ist bereits abgeglichen.
 ErrorUnmatchBankLineInAccounting=Zuordnung kann nicht aufgehoben werden: Die Bankbuchung wurde bereits in die Buchhaltung übernommen.
+AssignRemainder=Restbetrag weiteren Rechnungen zuordnen
+Remainder=Rest

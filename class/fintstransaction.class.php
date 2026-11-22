@@ -473,6 +473,37 @@ class FintsTransaction extends CommonObject
      *
      * @return int <0 KO, 1 OK
      */
+    /**
+     * Amount of the transaction already assigned to invoices
+     *
+     * @return float
+     */
+    public function getAssignedAmount()
+    {
+        $res = $this->db->query("SELECT COUNT(*) AS nb, COALESCE(SUM(amount), 0) AS total FROM ".MAIN_DB_PREFIX."fintsbank_transaction_invoice WHERE fk_transaction = ".(int) $this->id);
+        $o = $res ? $this->db->fetch_object($res) : null;
+        if ($o && (int) $o->nb > 0) {
+            return round((float) $o->total, 2);
+        }
+        // Matches from before 2.3.3 have no assignment rows and always used the full amount
+        return ($this->status == 'matched' && $this->fk_facture > 0) ? round(abs((float) $this->amount), 2) : 0.0;
+    }
+
+    /**
+     * Amount of the transaction not yet assigned to invoices
+     *
+     * @return float
+     */
+    public function getRemainingAmount()
+    {
+        return round(abs((float) $this->amount) - $this->getAssignedAmount(), 2);
+    }
+
+    /**
+     * Delete all invoice assignment rows of this transaction
+     *
+     * @return int
+     */
     public function clearInvoiceAssignments()
     {
         $sql = "DELETE FROM ".MAIN_DB_PREFIX."fintsbank_transaction_invoice WHERE fk_transaction = ".(int)$this->id;

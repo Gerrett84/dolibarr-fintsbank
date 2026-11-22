@@ -130,3 +130,5 @@ SplitMultiHint=Click several invoices in the result list one after another - the
 ConfirmUnmatch=Remove the match? The payments created by it are deleted and the invoices set back to unpaid. The bank entry is kept.
 ErrorUnmatchBankLineReconciled=Cannot remove the match: the bank entry is already reconciled.
 ErrorUnmatchBankLineInAccounting=Cannot remove the match: the bank entry has already been transferred to accounting.
+AssignRemainder=Assign remaining amount to further invoices
+Remainder=Remaining
