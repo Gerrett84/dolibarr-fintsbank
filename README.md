@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 2.3.3** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 2.3.4** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -76,7 +76,7 @@ tar -czvf dolibarr_files_$(date +%Y%m%d).tar.gz /var/www/dolibarr
 
 ### Variante A: Über Dolibarr-Modul-Uploader (kein Konsolenzugriff nötig)
 
-Im [Release-Bereich](https://github.com/Gerrett84/dolibarr-fintsbank/releases) das ZIP-Asset der gewünschten Version herunterladen (z.B. `fintsbank-2.3.3.zip`) und über Dolibarr hochladen:
+Im [Release-Bereich](https://github.com/Gerrett84/dolibarr-fintsbank/releases) das ZIP-Asset der gewünschten Version herunterladen (z.B. `fintsbank-2.3.4.zip`) und über Dolibarr hochladen:
 
 ```
 Setup -> Module -> Externes Modul hochladen
@@ -211,6 +211,10 @@ Bei der Zuordnung wird automatisch:
 ---
 
 ## Changelog
+
+### v2.3.4 (2026-11-24)
+- **Fix: Kontoabruf „Unexpected token '<' … is not valid JSON"** (#1) - Der Abruf antwortet immer mit sauberem JSON; PHP-Warnungen und -Hinweise (z. B. Deprecations der php-fints-Bibliothek unter PHP 8.4) landen im Dolibarr-Log statt in der Antwort
+- **Verständliche Fehlermeldung** - Kommt trotzdem keine gültige Antwort vom Server, zeigt die Seite den Anfang der Serverantwort statt eines reinen Parser-Fehlers
 
 ### v2.3.3 (2026-11-22)
 - **Eine Zahlung auf mehrere Rechnungen** - Im Aufteilen-Fenster bleibt die Trefferliste offen, mehrere Rechnungen werden nacheinander angeklickt (bereits gewählte mit ✓); vorgeschlagen wird jeweils der offene Rechnungsbetrag

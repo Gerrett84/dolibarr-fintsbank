@@ -13,20 +13,66 @@
  * \brief      AJAX handler for bank sync
  */
 
-// Error handler to catch fatal errors and return JSON
-function fintsSyncErrorHandler($errno, $errstr, $errfile, $errline) {
-    header('Content-Type: application/json');
-    echo json_encode(array(
-        'success' => false,
-        'error' => "PHP Error: $errstr in $errfile:$errline"
-    ));
+// This endpoint must always answer with clean JSON. PHP notices, warnings and
+// deprecations (e.g. from php-fints on PHP 8.4+) are logged instead of being
+// printed, and any stray output is dropped before the JSON is sent.
+ini_set('display_errors', '0');
+ob_start();
+
+function fintsSyncLog($message)
+{
+    if (function_exists('dol_syslog')) {
+        dol_syslog('FinTS sync: '.$message, LOG_WARNING);
+    } else {
+        error_log('FinTS sync: '.$message);
+    }
+}
+
+function fintsSyncErrorHandler($errno, $errstr, $errfile, $errline)
+{
+    if (!(error_reporting() & $errno)) {
+        return false; // suppressed with @
+    }
+    fintsSyncLog("PHP error $errno: $errstr in $errfile:$errline");
+    return true; // handled: never print it into the JSON response
+}
+
+/**
+ * Send a JSON response, dropping any output produced before it.
+ *
+ * @param array $data Response data
+ * @return void
+ */
+function fintsJsonOut($data)
+{
+    while (ob_get_level() > 0) {
+        $noise = ob_get_clean();
+        if (trim((string) $noise) !== '') {
+            fintsSyncLog('Discarded output before JSON: '.substr(strip_tags($noise), 0, 500));
+        }
+    }
+    if (!headers_sent()) {
+        header('Content-Type: application/json');
+    }
+    echo json_encode($data);
+    global $db;
+    if (is_object($db)) {
+        $db->close();
+    }
     exit;
 }
 
-function fintsSyncShutdownHandler() {
+function fintsSyncShutdownHandler()
+{
     $error = error_get_last();
     if ($error && in_array($error['type'], array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR))) {
-        header('Content-Type: application/json');
+        fintsSyncLog("Fatal error: {$error['message']} in {$error['file']}:{$error['line']}");
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        if (!headers_sent()) {
+            header('Content-Type: application/json');
+        }
         echo json_encode(array(
             'success' => false,
             'error' => "Fatal Error: {$error['message']} in {$error['file']}:{$error['line']}"
@@ -34,7 +80,7 @@ function fintsSyncShutdownHandler() {
     }
 }
 
-set_error_handler('fintsSyncErrorHandler', E_ERROR | E_PARSE);
+set_error_handler('fintsSyncErrorHandler');
 register_shutdown_function('fintsSyncShutdownHandler');
 
 // Dolibarr AJAX configuration - must be before main.inc.php
@@ -51,9 +97,6 @@ if (!defined('NOREQUIREAJAX')) {
     define('NOREQUIREAJAX', '1');
 }
 
-// Disable output buffering for real-time response
-if (ob_get_level()) ob_end_clean();
-
 // Load Dolibarr environment
 $res = 0;
 if (!$res && file_exists("../../main.inc.php")) {
@@ -67,20 +110,18 @@ if (!$res && file_exists("../../../../main.inc.php")) {
 }
 if (!$res) {
     http_response_code(500);
-    echo json_encode(array('success' => false, 'error' => 'Include of main fails'));
-    exit;
+    fintsJsonOut(array('success' => false, 'error' => 'Include of main fails'));
 }
+
+ini_set('display_errors', '0');
+set_error_handler('fintsSyncErrorHandler');
 
 dol_include_once('/fintsbank/class/fintsaccount.class.php');
 dol_include_once('/fintsbank/class/fintsservice.class.php');
 
-// Set JSON response header
-header('Content-Type: application/json');
-
 // Security check
 if (!$user->rights->fintsbank->sync) {
-    echo json_encode(array('success' => false, 'error' => 'Access denied'));
-    exit;
+    fintsJsonOut(array('success' => false, 'error' => 'Access denied'));
 }
 
 // CSRF check - with NOTOKENRENEWAL, check against newtoken (not rotated)
@@ -88,16 +129,14 @@ $token = GETPOST('token', 'alpha');
 $sessionToken = isset($_SESSION['newtoken']) ? $_SESSION['newtoken'] : (isset($_SESSION['token']) ? $_SESSION['token'] : '');
 if (empty($token) || $token != $sessionToken) {
     dol_syslog("FinTS CSRF check failed: received=$token, session=$sessionToken", LOG_WARNING);
-    echo json_encode(array('success' => false, 'error' => 'Invalid security token'));
-    exit;
+    fintsJsonOut(array('success' => false, 'error' => 'Invalid security token'));
 }
 
 $action = GETPOST('action', 'aZ09');
 
 // Check library
 if (!FintsService::isLibraryAvailable()) {
-    echo json_encode(array('success' => false, 'error' => 'php-fints library not installed'));
-    exit;
+    fintsJsonOut(array('success' => false, 'error' => 'php-fints library not installed'));
 }
 
 $service = new FintsService($db);
@@ -111,20 +150,17 @@ switch ($action) {
         $syncFrom = GETPOST('sync_from', 'alpha');
 
         if (!$id) {
-            echo json_encode(array('success' => false, 'error' => 'No account selected'));
-            exit;
+            fintsJsonOut(array('success' => false, 'error' => 'No account selected'));
         }
 
         if (!$pin) {
-            echo json_encode(array('success' => false, 'error' => 'PIN required'));
-            exit;
+            fintsJsonOut(array('success' => false, 'error' => 'PIN required'));
         }
 
         // Load account
         $account = new FintsAccount($db);
         if ($account->fetch($id) <= 0) {
-            echo json_encode(array('success' => false, 'error' => 'Account not found'));
-            exit;
+            fintsJsonOut(array('success' => false, 'error' => 'Account not found'));
         }
 
         // Set sync date
@@ -138,7 +174,7 @@ switch ($action) {
         $service->setAccount($account);
         $result = $service->startSync($pin, $fromDate);
 
-        echo json_encode($result);
+        fintsJsonOut($result);
         break;
 
     case 'tan':
@@ -146,16 +182,15 @@ switch ($action) {
         $tan = GETPOST('tan', 'alpha');
 
         if (!$tan) {
-            echo json_encode(array('success' => false, 'error' => 'TAN required'));
-            exit;
+            fintsJsonOut(array('success' => false, 'error' => 'TAN required'));
         }
 
         $result = $service->submitTan($tan);
-        echo json_encode($result);
+        fintsJsonOut($result);
         break;
 
     default:
-        echo json_encode(array('success' => false, 'error' => 'Unknown action'));
+        fintsJsonOut(array('success' => false, 'error' => 'Unknown action'));
 }
 
 $db->close();

@@ -234,6 +234,18 @@ if ($id > 0) {
         showStep("step-result");
     }
 
+    // Parse the AJAX answer; show the start of a non-JSON answer (e.g. a PHP message) instead of a bare parse error
+    function fintsParseResponse(response) {
+        return response.text().then(function(text) {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                var plain = text.replace(/<[^>]*>/g, " ").replace(/\\s+/g, " ").trim().substring(0, 300);
+                throw new Error("Unerwartete Serverantwort (HTTP " + response.status + "): " + (plain || "leer"));
+            }
+        });
+    }
+
     // Start sync button
     document.getElementById("btn-start-sync").addEventListener("click", function() {
         var pin = document.getElementById("pin").value;
@@ -251,7 +263,7 @@ if ($id > 0) {
             headers: {"Content-Type": "application/x-www-form-urlencoded"},
             body: "action=start&id=" + accountId + "&pin=" + encodeURIComponent(pin) + "&sync_from=" + syncFrom + "&token='.newToken().'"
         })
-        .then(response => response.json())
+        .then(fintsParseResponse)
         .then(data => {
             if (data.success) {
                 if (data.needsTan) {
@@ -295,7 +307,7 @@ if ($id > 0) {
             headers: {"Content-Type": "application/x-www-form-urlencoded"},
             body: "action=tan&tan=" + encodeURIComponent(tan) + "&token='.newToken().'"
         })
-        .then(response => response.json())
+        .then(fintsParseResponse)
         .then(data => {
             if (data.success) {
                 if (data.needsTan) {
