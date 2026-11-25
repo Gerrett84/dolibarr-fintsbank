@@ -17,6 +17,9 @@
 $autoloadPath = dol_buildpath('/fintsbank/vendor/autoload.php', 0);
 if (file_exists($autoloadPath)) {
     require_once $autoloadPath;
+    // Psr\Log may already be loaded in another version by Dolibarr or another module (issue #2).
+    // Registered after Composer, because Composer prepends its own autoloader.
+    require_once dol_buildpath('/fintsbank/lib/psrlog_compat.php', 0);
 }
 
 dol_include_once('/fintsbank/class/fintsaccount.class.php');

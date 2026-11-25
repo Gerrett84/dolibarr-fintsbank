@@ -1,6 +1,6 @@
 # Dolibarr FinTS Bank Module
 
-**Version 2.3.4** | Automatischer Kontoabruf per FinTS/HBCI
+**Version 2.3.5** | Automatischer Kontoabruf per FinTS/HBCI
 
 [![Dolibarr](https://img.shields.io/badge/Dolibarr-18.0%2B-blue.svg)](https://www.dolibarr.org)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
@@ -76,7 +76,7 @@ tar -czvf dolibarr_files_$(date +%Y%m%d).tar.gz /var/www/dolibarr
 
 ### Variante A: Über Dolibarr-Modul-Uploader (kein Konsolenzugriff nötig)
 
-Im [Release-Bereich](https://github.com/Gerrett84/dolibarr-fintsbank/releases) das ZIP-Asset der gewünschten Version herunterladen (z.B. `fintsbank-2.3.4.zip`) und über Dolibarr hochladen:
+Im [Release-Bereich](https://github.com/Gerrett84/dolibarr-fintsbank/releases) das ZIP-Asset der gewünschten Version herunterladen (z.B. `fintsbank-2.3.5.zip`) und über Dolibarr hochladen:
 
 ```
 Setup -> Module -> Externes Modul hochladen
@@ -211,6 +211,9 @@ Bei der Zuordnung wird automatisch:
 ---
 
 ## Changelog
+
+### v2.3.5 (2026-11-25)
+- Fix: Kontoabruf brach mit „Declaration of Psr\Log\NullLogger::log(...) must be compatible with Psr\Log\LoggerInterface::log(...)“ ab, wenn Dolibarr oder ein anderes Modul die Logging-Schnittstelle psr/log bereits in einer anderen Version geladen hatte (#2). Die Psr\Log-Klassen werden jetzt immer aus derselben Kopie geladen.
 
 ### v2.3.4 (2026-11-24)
 - **Fix: Kontoabruf „Unexpected token '<' … is not valid JSON"** (#1) - Der Abruf antwortet immer mit sauberem JSON; PHP-Warnungen und -Hinweise (z. B. Deprecations der php-fints-Bibliothek unter PHP 8.4) landen im Dolibarr-Log statt in der Antwort

@@ -53,7 +53,7 @@ class modFintsBank extends DolibarrModules
         $this->descriptionlong = "Retrieve bank statements automatically using FinTS (formerly HBCI). Supports German banks including Commerzbank, Sparkasse, Volksbank and others.";
 
         // Version
-        $this->version = '2.3.4';
+        $this->version = '2.3.5';
 
         // Editor
         $this->editor_name = 'Gerrett84';
